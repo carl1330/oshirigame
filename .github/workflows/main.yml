@@ -1,0 +1,45 @@
+name: Deployment
+on:
+  push:
+    branches:
+      - main
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v5.0.0
+        with:
+          go-version: 1.21.0
+      - uses: actions/setup-node@v1
+        with:
+          node-version: "21.0.0"
+
+      - name: Change dir and install deps
+        run: npm ci
+
+      - name: Change directory and build frontend
+        run: npm run build --if-present
+
+      - name: Build app
+        run: make build
+
+      - name: Copy folder content recursively to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.VULTR_USERNAME }}
+          password: ${{ secrets.VULTR_PASSWORD }}
+          source: "./app"
+          target: app
+
+      - name: executing remote ssh commands using password
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.SUDO_USERNAME }}
+          password: ${{ secrets.SUDO_PASSWORD }}
+          script: systemctl restart oshirigame.service
+
+      - name: Print job status
+        run: echo "🍏 This job's status is ${{ job.status }}."
