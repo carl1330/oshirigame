@@ -17,15 +17,16 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	JOIN_GAME      = "JOIN_GAME"
-	START_GAME     = "START_GAME"
-	ROUND_START    = "ROUND_START"
-	NEXT_ROUND     = "NEXT_ROUND"
-	GAME_STATE     = "GAME_STATE"
-	NEW_CLIENT     = "NEW_CLIENT"
-	PLAYER_STATE   = "PLAYER_STATE"
-	PLAYER_INPUT   = "PLAYER_INPUT"
-	ROUND_FINISHED = "ROUND_FINISHED"
+	JOIN_GAME         = "JOIN_GAME"
+	START_GAME        = "START_GAME"
+	ROUND_START       = "ROUND_START"
+	NEXT_ROUND        = "NEXT_ROUND"
+	GAME_STATE        = "GAME_STATE"
+	NEW_CLIENT        = "NEW_CLIENT"
+	PLAYER_STATE      = "PLAYER_STATE"
+	PLAYER_INPUT      = "PLAYER_INPUT"
+	ROUND_FINISHED    = "ROUND_FINISHED"
+	USERNAME_TOO_LONG = "USERNAME_TOO_LONG"
 )
 
 type handler struct {
@@ -106,6 +107,13 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 
 	if err != nil {
 		return fmt.Errorf("error unmarshalling message data")
+	}
+
+	if len(joinRoomMessage.Username) > 20 {
+		c.send <- &Message{
+			Type: USERNAME_TOO_LONG,
+		}
+		return fmt.Errorf("username too long")
 	}
 
 	game, err := h.GetGame(joinRoomMessage.Id)

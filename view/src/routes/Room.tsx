@@ -73,6 +73,7 @@ export const EventGameState = "GAME_STATE";
 export const EventRoundStart = "ROUND_START";
 export const EventPlayerInput = "PLAYER_INPUT";
 export const EventRoundFinished = "ROUND_FINISHED";
+export const EventUsernameTooLong = "USERNAME_TOO_LONG";
 
 export default function Room() {
   const { gameId } = useParams();
@@ -161,7 +162,14 @@ export default function Room() {
         const gameStateFinished = event.data as RoundOverResponse;
         setTopWords(gameStateFinished.topWords);
         setGameState(gameStateFinished.gameState);
+        setInputUsername("");
         setFocus(false);
+        break;
+      }
+      case EventUsernameTooLong: {
+        console.log("username too long");
+        toast.error("Username too long");
+        setUsername("");
         break;
       }
     }

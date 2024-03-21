@@ -159,7 +159,7 @@ func (g *game) FinishRound() {
 
 	g.SetRoundOver(true)
 	g.SetAtama(RandomLetter())
-	g.SetAtama(RandomLetter())
+	g.SetOshiri(RandomLetter())
 	g.IncrementRound()
 
 	roundOverResponse.GameState = g.MarsalGameState()
