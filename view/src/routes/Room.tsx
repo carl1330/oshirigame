@@ -149,13 +149,14 @@ export default function Room() {
         setGameState(event.data as GameState);
         setAtamaActive(true);
         break;
-      case EventGameState:
+      case EventGameState: {
         const gameState = event.data as GameState;
         setGameState(gameState);
         if (player && !player.isLeader) {
           setPlayerInput(gameState.input);
         }
         break;
+      }
       case EventPlayerState:
         setPlayer(event.data as Player);
         break;
