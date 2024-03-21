@@ -7,7 +7,7 @@ export const devConfig = {
 
 export const prodConfig = {
   httpProtocol: "https",
-  host: "oshiri.carlgulliksson.dev",
+  host: "backend.carlgulliksson.dev",
   port: 8080,
   wsProtocol: "wss",
 };
