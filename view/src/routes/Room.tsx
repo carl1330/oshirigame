@@ -7,6 +7,9 @@ import { useLocalStorage } from "usehooks-ts";
 import PlayerCard from "../components/PlayerCard";
 import Button from "../components/Button";
 import { ToastContainer, toast } from "react-toastify";
+import LetterBoxInput from "../components/LetterBoxInput";
+import LetterBoxView from "../components/LetterBoxView";
+import LetterRandomizer from "../components/LetterRandomizer";
 
 export type Event = {
   type: string;
@@ -15,9 +18,13 @@ export type Event = {
 
 export type GameState = {
   started: boolean;
-  playerQueue: Player[];
   time: number;
   round: number;
+  playerQueue: Player[];
+  input: string;
+  atama: string;
+  oshiri: string;
+  roundOver: boolean;
 };
 
 type Player = {
@@ -33,25 +40,50 @@ interface JoinGameMessage {
   id: string;
 }
 
+interface PlayerInputMessage {
+  token: string;
+  id: string;
+  input: string;
+}
+
 interface NewClientEvent {
   token: string;
 }
 
-export type Message = GameState | JoinGameMessage | NewClientEvent | null;
+interface RoundOverResponse {
+  topWords: string[];
+  gameState: GameState;
+}
+
+export type Message =
+  | GameState
+  | JoinGameMessage
+  | NewClientEvent
+  | PlayerInputMessage
+  | RoundOverResponse
+  | null;
 
 export const EventJoinGame = "JOIN_GAME";
 export const EventPlayerState = "PLAYER_STATE";
 export const EventRoomNotFound = "ROOM_NOT_FOUND";
+export const EventNextRound = "NEXT_ROUND";
 export const EventNewClient = "NEW_CLIENT";
 export const EventGameStart = "START_GAME";
 export const EventGameState = "GAME_STATE";
+export const EventRoundStart = "ROUND_START";
+export const EventPlayerInput = "PLAYER_INPUT";
+export const EventRoundFinished = "ROUND_FINISHED";
 
 export default function Room() {
   const { gameId } = useParams();
   const [token, setToken] = useLocalStorage("token", "");
   const [username, setUsername] = useLocalStorage("username", "");
   const [gameState, setGameState] = useState<GameState>();
+  const [topWords, setTopWords] = useState<string[]>([]);
   const [player, setPlayer] = useState<Player>();
+  const [atamaActive, setAtamaActive] = useState(false);
+  const [oshiriActive, setOshiriActive] = useState(false);
+  const [playerInput, setPlayerInput] = useState("");
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -96,6 +128,11 @@ export default function Room() {
           });
         break;
       }
+      case EventGameStart:
+        console.log("game start");
+        setGameState(event.data as GameState);
+        setAtamaActive(true);
+        break;
       case EventGameState:
         console.log("game state");
         setGameState(event.data as GameState);
@@ -104,8 +141,39 @@ export default function Room() {
         console.log("player state");
         setPlayer(event.data as Player);
         break;
+      case EventRoundStart: {
+        console.log("round start");
+        const gameState = event.data as GameState;
+        setGameState(gameState);
+        break;
+      }
+      case EventNextRound:
+        if (player) {
+          if (!player.isLeader) {
+            setAtamaActive(true);
+          }
+        }
+        break;
+      case EventRoundFinished: {
+        console.log("round finished");
+        console.log(event.data);
+        const gameStateFinished = event.data as RoundOverResponse;
+        setTopWords(gameStateFinished.topWords);
+        setGameState(gameStateFinished.gameState);
+        break;
+      }
     }
   }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (player && gameId) {
+      sendEvent(EventPlayerInput, {
+        token: player.token,
+        id: gameId,
+        input: playerInput,
+      });
+    }
+  }, [playerInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleJoinRoom(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
@@ -163,14 +231,87 @@ export default function Room() {
     if (gameId) sendEvent(EventGameStart, { token: token, id: gameId });
   }
 
+  function handleStartRound() {
+    if (gameId) {
+      setPlayerInput("");
+      setAtamaActive(true);
+      sendEvent(EventNextRound, null);
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen p-2 gap-2">
       <div className="flex grow w-full gap-2">
         {gameState.started ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
             <h1 className="text-white text-3xl font-bold">
-              Time left: {gameState.time}
+              {gameState.roundOver
+                ? "Round Over"
+                : "Time left: " + gameState.time}
             </h1>
+            <div className="flex gap-2">
+              {player.isLeader ? (
+                <>
+                  <LetterRandomizer
+                    letter={gameState.atama}
+                    active={atamaActive}
+                    setActive={setAtamaActive}
+                    onFinished={() => {
+                      setOshiriActive(true);
+                    }}
+                  />
+                  <LetterBoxInput
+                    text={playerInput}
+                    setText={setPlayerInput}
+                    disabled={gameState.roundOver}
+                  />
+                  <LetterRandomizer
+                    letter={gameState.oshiri}
+                    active={oshiriActive}
+                    setActive={setOshiriActive}
+                    onFinished={() => {
+                      sendEvent(EventRoundStart, { token: token, id: gameId });
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <LetterRandomizer
+                    letter={gameState.atama}
+                    active={atamaActive}
+                    setActive={setAtamaActive}
+                    onFinished={() => {
+                      setOshiriActive(true);
+                    }}
+                  />
+                  <LetterBoxView text={gameState.input.toUpperCase()} />
+                  <LetterRandomizer
+                    letter={gameState.oshiri}
+                    active={oshiriActive}
+                    setActive={setOshiriActive}
+                  />
+                </>
+              )}
+            </div>
+            <div className="flex gap-2 text-white">
+              {gameState.roundOver && "top words: "}
+              {gameState.roundOver &&
+                topWords.map((value, key) => (
+                  <p key={key} className="text-white">
+                    {value}
+                  </p>
+                ))}
+            </div>
+            {gameState.roundOver && player.isLeader ? (
+              <Button onClick={handleStartRound}>Next round</Button>
+            ) : (
+              <p className="text-white">
+                {gameState.roundOver &&
+                  "Waiting for " +
+                    gameState.playerQueue[0].username +
+                    " to start next round"}
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
