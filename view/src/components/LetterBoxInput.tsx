@@ -23,7 +23,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
   return (
     <div className={`relative ${props.text.length === 0 && "w-16"}`}>
       <input
-        maxLength={20}
+        maxLength={45}
         ref={ref}
         onBlur={(e) => e.target.focus()}
         key={"nonleader"}
