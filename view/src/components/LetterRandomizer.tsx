@@ -4,36 +4,38 @@ interface LetterRandomizerProps {
   letter: string;
   active: boolean;
   onFinished?: () => void;
-  setActive: (active: boolean) => void;
 }
 
 export default function LetterRandomizer(props: LetterRandomizerProps) {
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
-    if (props.active) {
-      let counter = 10;
-      const func = () => {
-        clearInterval(interval);
-        letterRoulette(setLetter);
-        counter += 2;
-        interval = setInterval(func, counter);
-      };
-      let interval = setInterval(func, counter);
-
-      setTimeout(() => {
-        clearInterval(interval);
-        setLetter(props.letter);
-        props.setActive(false);
-        if (props.onFinished) {
-          props.onFinished();
-        }
-      }, 3000);
+    let counter = 10;
+    let func = () => {
+      clearInterval(interval);
+      letterRoulette(setLetter);
+      counter += 2;
+      interval = setInterval(func, counter);
+    };
+    var interval = setInterval(func, counter);
+    if (!props.active) {
+      if (props.onFinished) {
+        props.onFinished();
+      }
     }
   }, [props.active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (props.active) {
+    return (
+      <div className="flex justify-center items-center rounded-md text-white font-bold text-5xl w-16 h-16 border-white border">
+        {letter.toUpperCase()}
+      </div>
+    );
+  }
+
   return (
     <div className="flex justify-center items-center rounded-md text-white font-bold text-5xl w-16 h-16 border-white border">
-      {letter.toUpperCase()}
+      {props.letter.toUpperCase()}
     </div>
   );
 }

@@ -79,3 +79,7 @@ func (wl *WordList) WordCount(atama string, oshiri string) int {
 	}
 	return count
 }
+
+func (wl *WordList) IsValidWord(word string) bool {
+	return wl.Words[word]
+}

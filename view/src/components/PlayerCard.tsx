@@ -5,7 +5,6 @@ interface PlayerCardProps {
   score: number;
   isCurrentPlayer: boolean;
   isLeader: boolean;
-  gameStarted: boolean;
 }
 
 export default function PlayerCard(props: PlayerCardProps) {

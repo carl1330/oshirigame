@@ -81,6 +81,8 @@ func NewPlayer(username string, token string, client *client) *Player {
 }
 
 func (g *game) Enqueue(player *Player) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
 	if len(g.GameState.PlayerQueue) == 0 {
 		player.IsLeader = true
 	}
@@ -88,6 +90,8 @@ func (g *game) Enqueue(player *Player) {
 }
 
 func (g *game) Dequeue() *Player {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
 	player := g.GameState.PlayerQueue[0]
 	player.IsLeader = false
 	g.GameState.PlayerQueue = g.GameState.PlayerQueue[1:]
@@ -139,6 +143,19 @@ func (g *game) StartRound() {
 	g.SetRoundOver(false)
 	g.SetGameStateTime(25)
 	g.SetGameStateInput("")
+	for {
+		g.SetAtama(RandomLetter())
+		g.SetOshiri(RandomLetter())
+		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) > 400 {
+			break
+		}
+	}
+	time.Sleep(3 * time.Second)
+	g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
+
+	time.Sleep(3 * time.Second)
+	g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
+
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
 	for i := 0; i < 25; i++ {
@@ -156,16 +173,10 @@ func (g *game) FinishRound() {
 
 	var roundOverResponse RoundOverResponse
 	roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
+	roundOverResponse.Word = g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri
+	roundOverResponse.WordAccepted = g.WordList.IsValidWord(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri)
 
 	g.SetRoundOver(true)
-
-	for {
-		g.SetAtama(RandomLetter())
-		g.SetOshiri(RandomLetter())
-		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) > 400 {
-			break
-		}
-	}
 
 	g.IncrementRound()
 

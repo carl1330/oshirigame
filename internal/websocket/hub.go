@@ -83,6 +83,7 @@ func (h *hub) AttemptReconnectGame(c *client) {
 			if err != nil {
 				return
 			}
+
 			game.SendGameState(c)
 
 			return

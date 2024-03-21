@@ -20,6 +20,8 @@ const (
 	JOIN_GAME         = "JOIN_GAME"
 	START_GAME        = "START_GAME"
 	ROUND_START       = "ROUND_START"
+	ROUND_ATAMA       = "ROUND_ATAMA"
+	ROUND_OSHIRI      = "ROUND_OSHIRI"
 	NEXT_ROUND        = "NEXT_ROUND"
 	GAME_STATE        = "GAME_STATE"
 	NEW_CLIENT        = "NEW_CLIENT"
@@ -56,8 +58,10 @@ type PlayerInputMessage struct {
 }
 
 type RoundOverResponse struct {
-	TopWords  []string        `json:"topWords"`
-	GameState json.RawMessage `json:"gameState"`
+	TopWords     []string        `json:"topWords"`
+	GameState    json.RawMessage `json:"gameState"`
+	Word         string          `json:"word"`
+	WordAccepted bool            `json:"wordAccepted"`
 }
 
 type MessageHandler func(m *Message, c *client) error
@@ -151,6 +155,7 @@ func (h *hub) StartGame(m *Message, c *client) error {
 	}
 
 	game.InitializeGame()
+	go game.StartRound()
 	game.GameState.Lock()
 	data, _ := json.Marshal(game.GameState)
 	game.GameState.Unlock()
@@ -198,6 +203,10 @@ func (h *hub) NextRound(m *Message, c *client) error {
 	game.broadcast <- &Message{
 		Type: NEXT_ROUND,
 		Data: data,
+	}
+
+	if !game.IsRunning() {
+		go game.StartRound()
 	}
 	return nil
 }

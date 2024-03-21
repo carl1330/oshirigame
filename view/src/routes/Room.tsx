@@ -10,6 +10,7 @@ import { ToastContainer, toast } from "react-toastify";
 import LetterBoxInput from "../components/LetterBoxInput";
 import LetterBoxView from "../components/LetterBoxView";
 import LetterRandomizer from "../components/LetterRandomizer";
+import LetterBoxFinished from "../components/LetterBoxFinished";
 
 export type Event = {
   type: string;
@@ -50,9 +51,15 @@ interface NewClientEvent {
   token: string;
 }
 
+interface NewLetterEvent {
+  letter: string;
+}
+
 interface RoundOverResponse {
   topWords: string[];
   gameState: GameState;
+  wordAccepted: boolean;
+  word: string;
 }
 
 export type Message =
@@ -61,6 +68,7 @@ export type Message =
   | NewClientEvent
   | PlayerInputMessage
   | RoundOverResponse
+  | NewLetterEvent
   | null;
 
 export const EventJoinGame = "JOIN_GAME";
@@ -74,6 +82,8 @@ export const EventRoundStart = "ROUND_START";
 export const EventPlayerInput = "PLAYER_INPUT";
 export const EventRoundFinished = "ROUND_FINISHED";
 export const EventUsernameTooLong = "USERNAME_TOO_LONG";
+export const EventRoundAtama = "ROUND_ATAMA";
+export const EventRoundOshiri = "ROUND_OSHIRI";
 
 export default function Room() {
   const { gameId } = useParams();
@@ -84,7 +94,12 @@ export default function Room() {
   const [player, setPlayer] = useState<Player>();
   const [atamaActive, setAtamaActive] = useState(false);
   const [oshiriActive, setOshiriActive] = useState(false);
+  const [atama, setAtama] = useState("");
+  const [oshiri, setOshiri] = useState("");
+  const [roundOver, setRoundOver] = useState(false);
   const [playerInput, setPlayerInput] = useState("");
+  const [finishedWord, setFinishedWord] = useState<string>("");
+  const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
@@ -131,20 +146,20 @@ export default function Room() {
         break;
       }
       case EventGameStart:
-        console.log("game start");
         setGameState(event.data as GameState);
         setAtamaActive(true);
         break;
       case EventGameState:
-        console.log("game state");
-        setGameState(event.data as GameState);
+        const gameState = event.data as GameState;
+        setGameState(gameState);
+        if (player && !player.isLeader) {
+          setPlayerInput(gameState.input);
+        }
         break;
       case EventPlayerState:
-        console.log("player state");
         setPlayer(event.data as Player);
         break;
       case EventRoundStart: {
-        console.log("round start");
         const gameState = event.data as GameState;
         setGameState(gameState);
         break;
@@ -152,16 +167,17 @@ export default function Room() {
       case EventNextRound:
         if (player) {
           if (!player.isLeader) {
-            setAtamaActive(true);
+            setRoundOver(false);
           }
         }
         break;
       case EventRoundFinished: {
-        console.log("round finished");
-        console.log(event.data);
         const gameStateFinished = event.data as RoundOverResponse;
+        setRoundOver(true);
         setTopWords(gameStateFinished.topWords);
         setGameState(gameStateFinished.gameState);
+        setFinishedWord(gameStateFinished.word.toLocaleUpperCase());
+        setWordAccepted(gameStateFinished.wordAccepted);
         setInputUsername("");
         setFocus(false);
         break;
@@ -172,6 +188,17 @@ export default function Room() {
         setUsername("");
         break;
       }
+      case EventRoomNotFound:
+        navigate("/");
+        break;
+      case EventRoundAtama:
+        setAtama((event.data as NewLetterEvent).letter);
+        setAtamaActive(false);
+        break;
+      case EventRoundOshiri:
+        setOshiri((event.data as NewLetterEvent).letter);
+        setOshiriActive(false);
+        break;
     }
   }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -245,6 +272,7 @@ export default function Room() {
     if (gameId) {
       setPlayerInput("");
       setAtamaActive(true);
+      setRoundOver(false);
       sendEvent(EventNextRound, null);
     }
   }
@@ -255,7 +283,7 @@ export default function Room() {
         {gameState.started ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
             <h1 className="text-white text-3xl font-bold">
-              {gameState.roundOver ? (
+              {roundOver ? (
                 "Round Over"
               ) : (
                 <div className="flex flex-col justify-center items-center gap-4">
@@ -267,12 +295,11 @@ export default function Room() {
               )}
             </h1>
             <div className="flex gap-2">
-              {player.isLeader ? (
+              {player.isLeader && !roundOver && (
                 <>
                   <LetterRandomizer
-                    letter={gameState.atama}
+                    letter={atama}
                     active={atamaActive}
-                    setActive={setAtamaActive}
                     onFinished={() => {
                       setOshiriActive(true);
                     }}
@@ -283,49 +310,43 @@ export default function Room() {
                     setText={setPlayerInput}
                     disabled={gameState.roundOver}
                   />
-                  <LetterRandomizer
-                    letter={gameState.oshiri}
-                    active={oshiriActive}
-                    setActive={setOshiriActive}
-                    onFinished={() => {
-                      sendEvent(EventRoundStart, { token: token, id: gameId });
-                      setFocus(true);
-                    }}
-                  />
+                  <LetterRandomizer letter={oshiri} active={oshiriActive} />
                 </>
-              ) : (
+              )}
+              {!player.isLeader && !roundOver && (
                 <>
                   <LetterRandomizer
-                    letter={gameState.atama}
+                    letter={atama}
                     active={atamaActive}
-                    setActive={setAtamaActive}
                     onFinished={() => {
                       setOshiriActive(true);
                     }}
                   />
-                  <LetterBoxView text={gameState.input.toUpperCase()} />
-                  <LetterRandomizer
-                    letter={gameState.oshiri}
-                    active={oshiriActive}
-                    setActive={setOshiriActive}
-                  />
+                  <LetterBoxView text={playerInput.toUpperCase()} />
+                  <LetterRandomizer letter={oshiri} active={oshiriActive} />
                 </>
+              )}
+              {roundOver && (
+                <LetterBoxFinished
+                  text={finishedWord}
+                  wordAccepted={wordAccepted}
+                />
               )}
             </div>
             <div className="flex gap-2 text-white">
-              {gameState.roundOver && "top words: "}
-              {gameState.roundOver &&
+              {roundOver && "top words: "}
+              {roundOver &&
                 topWords.map((value, key) => (
                   <p key={key} className="text-white">
                     {value}
                   </p>
                 ))}
             </div>
-            {gameState.roundOver && player.isLeader ? (
+            {roundOver && player.isLeader ? (
               <Button onClick={handleStartRound}>Next round</Button>
             ) : (
               <p className="text-white">
-                {gameState.roundOver &&
+                {roundOver &&
                   "Waiting for " +
                     gameState.playerQueue[0].username +
                     " to start next round"}
