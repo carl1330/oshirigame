@@ -78,6 +78,13 @@ func (h *hub) AttemptReconnectGame(c *client) {
 		<-ticker.C
 		if _, err := h.GetClient(c.token); err == nil {
 			fmt.Println("client reconnecting")
+			game, err := h.GetGame(c.gameId)
+
+			if err != nil {
+				return
+			}
+			game.SendGameState(c)
+
 			return
 		}
 		fmt.Println("client not reconnecting")

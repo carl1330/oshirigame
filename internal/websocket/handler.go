@@ -55,8 +55,8 @@ type PlayerInputMessage struct {
 }
 
 type RoundOverResponse struct {
-	TopWords  []string   `json:"topWords"`
-	GameState *GameState `json:"gameState"`
+	TopWords  []string        `json:"topWords"`
+	GameState json.RawMessage `json:"gameState"`
 }
 
 type MessageHandler func(m *Message, c *client) error
@@ -119,12 +119,10 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 	if err != nil {
 		player = NewPlayer(joinRoomMessage.Username, joinRoomMessage.Token, c)
 	} else {
-		player.client = c
+		player.SetPlayerClient(c)
 	}
 
-	c.Lock()
-	c.gameId = game.Id
-	c.Unlock()
+	c.SetClientGameId(game.Id)
 	game.register <- player
 
 	return nil

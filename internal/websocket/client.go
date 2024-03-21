@@ -95,3 +95,9 @@ func (c *client) WritePump(h *hub) {
 		}
 	}
 }
+
+func (c *client) SetClientGameId(id string) {
+	c.Lock()
+	defer c.Unlock()
+	c.gameId = id
+}

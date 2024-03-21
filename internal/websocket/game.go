@@ -99,6 +99,8 @@ func (g *game) Dequeue() *Player {
 }
 
 func (g *game) RemovePlayer(token string) {
+	g.Lock()
+	defer g.Unlock()
 	for i, player := range g.GameState.PlayerQueue {
 		if player.token == token {
 			updatedQueue := make([]*Player, 0)
@@ -123,74 +125,54 @@ func (g *game) GetPlayer(token string) (*Player, error) {
 	return g.players[token], nil
 }
 
+func (g *game) InitializeGame() {
+	g.SetGameStarted(true)
+	g.SetAtama(RandomLetter())
+	g.SetOshiri(RandomLetter())
+	g.SetGameStateTime(10)
+	g.SetGameStateInput("")
+	g.SetRoundOver(false)
+}
+
 func (g *game) StartRound() {
-	g.Lock()
-	g.running = true
-	g.Unlock()
-	g.GameState.Lock()
-	g.GameState.RoundOver = false
-	g.GameState.Input = ""
-	g.GameState.Time = 10
-	data, _ := json.Marshal(g.GameState)
-	g.GameState.Unlock()
-	message := &Message{
-		Type: ROUND_START,
-		Data: data,
-	}
-	g.broadcast <- message
+	g.SetGameRunning(true)
+	g.SetRoundOver(false)
+	g.SetGameStateTime(10)
+	g.SetGameStateInput("")
+	data := g.MarsalGameState()
+	g.BroadcastMessage(ROUND_START, data)
 	for i := 0; i < 10; i++ {
 		time.Sleep(1 * time.Second)
-		g.GameState.Lock()
-		g.GameState.Time--
-		g.GameState.Unlock()
+		g.DecreaseTime()
 		g.BroadcastGameState()
 	}
 	g.FinishRound()
 }
 
-func (g *game) InitializeGame() {
-	g.GameState.Lock()
-	g.GameState.Started = true
-	g.GameState.Atama = RandomLetter()
-	g.GameState.Oshiri = RandomLetter()
-	g.GameState.Unlock()
-}
-
 func (g *game) FinishRound() {
 	player := g.Dequeue()
-
-	g.GameState.Lock()
-	defer g.GameState.Unlock()
-
-	player.Score += g.WordList.GetScore(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri)
+	player.SetPlayerScore(g.WordList.GetScore(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri))
 	g.Enqueue(player)
 
 	var roundOverResponse RoundOverResponse
 	roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
 
-	g.GameState.RoundOver = true
-	g.GameState.Atama = RandomLetter()
-	g.GameState.Oshiri = RandomLetter()
-	g.GameState.Round++
+	g.SetRoundOver(true)
+	g.SetAtama(RandomLetter())
+	g.SetAtama(RandomLetter())
+	g.IncrementRound()
 
-	roundOverResponse.GameState = g.GameState
+	roundOverResponse.GameState = g.MarsalGameState()
 
 	data, _ := json.Marshal(roundOverResponse)
 
-	m := &Message{
-		Type: ROUND_FINISHED,
-		Data: data,
-	}
-
-	g.broadcast <- m
+	g.BroadcastMessage(ROUND_FINISHED, data)
 
 	for _, player := range g.players {
 		g.SendPlayerState(player)
 	}
 
-	g.Lock()
-	g.running = false
-	g.Unlock()
+	g.SetGameRunning(false)
 }
 
 func (g *game) Run() {
@@ -245,4 +227,92 @@ func (g *game) IsRunning() bool {
 	g.Lock()
 	defer g.Unlock()
 	return g.running
+}
+
+func (g *game) BroadcastMessage(messageType string, data json.RawMessage) {
+	message := &Message{
+		Type: messageType,
+		Data: data,
+	}
+	g.broadcast <- message
+}
+
+func (g *game) SendGameState(c *client) {
+	c.send <- &Message{
+		Type: GAME_STATE,
+		Data: g.MarsalGameState(),
+	}
+}
+
+func (g *game) SetGameRunning(running bool) {
+	g.Lock()
+	defer g.Unlock()
+	g.running = running
+}
+
+func (g *game) SetRoundOver(roundOver bool) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.RoundOver = roundOver
+}
+
+func (g *game) SetGameStateInput(input string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Input = input
+}
+
+func (g *game) SetGameStateTime(time int) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Time = time
+}
+
+func (g *game) DecreaseTime() {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Time--
+}
+
+func (g *game) MarsalGameState() []byte {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	data, _ := json.Marshal(g.GameState)
+	return data
+}
+
+func (g *game) SetGameStarted(started bool) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Started = started
+}
+
+func (g *game) SetAtama(atama string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Atama = atama
+}
+
+func (g *game) SetOshiri(oshiri string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Oshiri = oshiri
+}
+
+func (g *game) IncrementRound() {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Round++
+}
+
+func (p *Player) SetPlayerScore(score int) {
+	p.Lock()
+	defer p.Unlock()
+	p.Score = score
+}
+
+func (p *Player) SetPlayerClient(client *client) {
+	p.Lock()
+	defer p.Unlock()
+	p.client = client
 }
