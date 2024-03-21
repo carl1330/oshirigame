@@ -65,7 +65,7 @@ func NewGameState() *GameState {
 		Started:     false,
 		Round:       0,
 		MaxRounds:   10,
-		Time:        10,
+		Time:        25,
 		PlayerQueue: make([]*Player, 0),
 	}
 }
@@ -129,7 +129,7 @@ func (g *game) InitializeGame() {
 	g.SetGameStarted(true)
 	g.SetAtama(RandomLetter())
 	g.SetOshiri(RandomLetter())
-	g.SetGameStateTime(10)
+	g.SetGameStateTime(25)
 	g.SetGameStateInput("")
 	g.SetRoundOver(false)
 }
@@ -137,11 +137,11 @@ func (g *game) InitializeGame() {
 func (g *game) StartRound() {
 	g.SetGameRunning(true)
 	g.SetRoundOver(false)
-	g.SetGameStateTime(10)
+	g.SetGameStateTime(25)
 	g.SetGameStateInput("")
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 25; i++ {
 		time.Sleep(1 * time.Second)
 		g.DecreaseTime()
 		g.BroadcastGameState()
@@ -158,8 +158,15 @@ func (g *game) FinishRound() {
 	roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
 
 	g.SetRoundOver(true)
-	g.SetAtama(RandomLetter())
-	g.SetOshiri(RandomLetter())
+
+	for {
+		g.SetAtama(RandomLetter())
+		g.SetOshiri(RandomLetter())
+		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) > 400 {
+			break
+		}
+	}
+
 	g.IncrementRound()
 
 	roundOverResponse.GameState = g.MarsalGameState()

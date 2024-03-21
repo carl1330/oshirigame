@@ -69,3 +69,13 @@ func (wl *WordList) TopWords(atama string, oshiri string) []string {
 	}
 	return words
 }
+
+func (wl *WordList) WordCount(atama string, oshiri string) int {
+	count := 0
+	for word := range wl.Words {
+		if strings.HasPrefix(word, atama) && strings.HasSuffix(word, oshiri) {
+			count++
+		}
+	}
+	return count
+}
