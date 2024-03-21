@@ -36,6 +36,9 @@ func NewHub() *hub {
 	}
 	h.handlers[JOIN_GAME] = h.JoinRoom
 	h.handlers[START_GAME] = h.StartGame
+	h.handlers[ROUND_START] = h.StartRound
+	h.handlers[PLAYER_INPUT] = h.PlayerInput
+	h.handlers[NEXT_ROUND] = h.NextRound
 	return h
 }
 

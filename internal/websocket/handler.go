@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -16,11 +17,15 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	JOIN_GAME    = "JOIN_GAME"
-	START_GAME   = "START_GAME"
-	GAME_STATE   = "GAME_STATE"
-	NEW_CLIENT   = "NEW_CLIENT"
-	PLAYER_STATE = "PLAYER_STATE"
+	JOIN_GAME      = "JOIN_GAME"
+	START_GAME     = "START_GAME"
+	ROUND_START    = "ROUND_START"
+	NEXT_ROUND     = "NEXT_ROUND"
+	GAME_STATE     = "GAME_STATE"
+	NEW_CLIENT     = "NEW_CLIENT"
+	PLAYER_STATE   = "PLAYER_STATE"
+	PLAYER_INPUT   = "PLAYER_INPUT"
+	ROUND_FINISHED = "ROUND_FINISHED"
 )
 
 type handler struct {
@@ -41,6 +46,17 @@ type JoinRoomMessage struct {
 type StartGameMessage struct {
 	Id    string
 	Token string
+}
+
+type PlayerInputMessage struct {
+	Id    string
+	Token string
+	Input string
+}
+
+type RoundOverResponse struct {
+	TopWords  []string   `json:"topWords"`
+	GameState *GameState `json:"gameState"`
 }
 
 type MessageHandler func(m *Message, c *client) error
@@ -103,9 +119,7 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 	if err != nil {
 		player = NewPlayer(joinRoomMessage.Username, joinRoomMessage.Token, c)
 	} else {
-		player.Lock()
 		player.client = c
-		player.Unlock()
 	}
 
 	c.Lock()
@@ -130,7 +144,91 @@ func (h *hub) StartGame(m *Message, c *client) error {
 		return err
 	}
 
-	go game.StartRound()
+	game.InitializeGame()
+	game.GameState.Lock()
+	data, _ := json.Marshal(game.GameState)
+	game.GameState.Unlock()
+	message := &Message{
+		Type: START_GAME,
+		Data: data,
+	}
+	game.broadcast <- message
+
+	return nil
+}
+
+func (h *hub) StartRound(m *Message, c *client) error {
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	player, err := game.GetPlayer(c.token)
+
+	if err != nil {
+		return err
+	}
+
+	if !player.IsLeader {
+		return fmt.Errorf("player is not leader")
+	}
+
+	if !game.IsRunning() {
+		go game.StartRound()
+	}
+	return nil
+}
+
+func (h *hub) NextRound(m *Message, c *client) error {
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	data, _ := json.Marshal(game.GameState)
+
+	game.broadcast <- &Message{
+		Type: NEXT_ROUND,
+		Data: data,
+	}
+	return nil
+}
+
+func (h *hub) PlayerInput(m *Message, c *client) error {
+	var playerInputMessage PlayerInputMessage
+	err := json.Unmarshal(m.Data, &playerInputMessage)
+
+	if err != nil {
+		return fmt.Errorf("error unmarshalling message data")
+	}
+
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	player, err := game.GetPlayer(c.token)
+
+	if err != nil {
+		return err
+	}
+
+	if !player.IsLeader {
+		return fmt.Errorf("player is not leader")
+	}
+
+	if !game.GameState.Started {
+		return fmt.Errorf("game not started")
+	}
+
+	game.GameState.Lock()
+	game.GameState.Input = strings.ToLower(playerInputMessage.Input)
+	game.GameState.Unlock()
+
+	game.BroadcastGameState()
 
 	return nil
 }
