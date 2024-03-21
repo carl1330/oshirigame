@@ -2,11 +2,13 @@ package oshirigame
 
 import (
 	"bufio"
+	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 )
+
+//go:embed wordlists/words_alpha.txt
+var englishWords embed.FS
 
 type WordList struct {
 	Words map[string]bool
@@ -21,14 +23,7 @@ func NewWordList() *WordList {
 }
 
 func FillWordList(wl *WordList) {
-	absPath, err := filepath.Abs("../../assets/wordlists/words_alpha.txt")
-
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-
-	file, err := os.Open(absPath)
+	file, err := englishWords.Open("wordlists/words_alpha.txt")
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
