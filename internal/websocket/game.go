@@ -151,7 +151,7 @@ func (g *game) StartRound() {
 
 func (g *game) FinishRound() {
 	player := g.Dequeue()
-	player.SetPlayerScore(g.WordList.GetScore(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri))
+	player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
 	g.Enqueue(player)
 
 	var roundOverResponse RoundOverResponse
@@ -309,6 +309,12 @@ func (p *Player) SetPlayerScore(score int) {
 	p.Lock()
 	defer p.Unlock()
 	p.Score = score
+}
+
+func (p *Player) GetPlayerScore() int {
+	p.Lock()
+	defer p.Unlock()
+	return p.Score
 }
 
 func (p *Player) SetPlayerClient(client *client) {
