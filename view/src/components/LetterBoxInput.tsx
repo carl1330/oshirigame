@@ -1,7 +1,10 @@
+import { useEffect, useRef } from "react";
+
 interface LetterBoxProps {
   text: string;
   setText: (text: string) => void;
   disabled: boolean;
+  focus: boolean;
 }
 
 export default function LetterBoxInput(props: LetterBoxProps) {
@@ -9,11 +12,19 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     props.setText(e.target.value.toUpperCase());
   };
 
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    !props.disabled && ref.current?.focus();
+  }, [props.disabled]);
+
   const inputWidth = props.text.length * 64 + "px";
 
   return (
     <div className={`relative ${props.text.length === 0 && "w-16"}`}>
       <input
+        ref={ref}
+        onBlur={(e) => e.target.focus()}
         key={"nonleader"}
         type="text"
         value={props.text}

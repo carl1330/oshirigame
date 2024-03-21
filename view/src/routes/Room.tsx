@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import Footer from "../components/Footer";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import useWebSocket from "react-use-websocket";
 import { getWsConfig } from "../misc/server.conf";
 import { useLocalStorage } from "usehooks-ts";
@@ -84,6 +84,7 @@ export default function Room() {
   const [atamaActive, setAtamaActive] = useState(false);
   const [oshiriActive, setOshiriActive] = useState(false);
   const [playerInput, setPlayerInput] = useState("");
+  const [focus, setFocus] = useState(false);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -160,6 +161,7 @@ export default function Room() {
         const gameStateFinished = event.data as RoundOverResponse;
         setTopWords(gameStateFinished.topWords);
         setGameState(gameStateFinished.gameState);
+        setFocus(false);
         break;
       }
     }
@@ -245,9 +247,16 @@ export default function Room() {
         {gameState.started ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
             <h1 className="text-white text-3xl font-bold">
-              {gameState.roundOver
-                ? "Round Over"
-                : "Time left: " + gameState.time}
+              {gameState.roundOver ? (
+                "Round Over"
+              ) : (
+                <div className="flex flex-col justify-center items-center gap-4">
+                  <p className="text-4xl">
+                    {gameState.playerQueue[0].username}'s turn!
+                  </p>
+                  <p>Time left: {gameState.time}</p>
+                </div>
+              )}
             </h1>
             <div className="flex gap-2">
               {player.isLeader ? (
@@ -261,6 +270,7 @@ export default function Room() {
                     }}
                   />
                   <LetterBoxInput
+                    focus={focus}
                     text={playerInput}
                     setText={setPlayerInput}
                     disabled={gameState.roundOver}
@@ -271,6 +281,7 @@ export default function Room() {
                     setActive={setOshiriActive}
                     onFinished={() => {
                       sendEvent(EventRoundStart, { token: token, id: gameId });
+                      setFocus(true);
                     }}
                   />
                 </>
