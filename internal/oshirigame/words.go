@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,7 +21,14 @@ func NewWordList() *WordList {
 }
 
 func FillWordList(wl *WordList) {
-	file, err := os.Open("../../assets/wordlists/words_alpha.txt")
+	absPath, err := filepath.Abs("../../assets/wordlists/words_alpha.txt")
+
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	file, err := os.Open(absPath)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
