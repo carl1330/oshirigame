@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import Footer from "../components/Footer";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import useWebSocket from "react-use-websocket";
 import { getWsConfig } from "../misc/server.conf";
 import { useLocalStorage } from "usehooks-ts";
