@@ -377,7 +377,6 @@ export default function Room() {
               score={value.score}
               isLeader={value.isLeader}
               isCurrentPlayer={true}
-              gameStarted={gameState.started}
             />
           ))}
         </div>
