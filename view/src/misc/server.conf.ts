@@ -7,7 +7,7 @@ export const devConfig = {
 
 export const prodConfig = {
   httpProtocol: "https",
-  host: import.meta.env.BACKEND_URL,
+  host: import.meta.env.VITE_BACKEND_URL,
   port: 8080,
   wsProtocol: "wss",
 };
