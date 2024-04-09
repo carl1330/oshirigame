@@ -12,7 +12,6 @@ import LetterBoxView from "../components/LetterBoxView";
 import LetterRandomizer from "../components/LetterRandomizer";
 import LetterBoxFinished from "../components/LetterBoxFinished";
 import { FaCog } from "react-icons/fa";
-import GameOptionsDialog from "../components/GameOptionsDialog";
 
 export type Event = {
   type: string;
@@ -109,7 +108,6 @@ export default function Room() {
   const [finishedWord, setFinishedWord] = useState<string>("");
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
-  const [gameOptionsOpen, setGameOptionsOpen] = useState(false);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -394,14 +392,10 @@ export default function Room() {
               <>
                 <div className="flex flex-col items-center gap-2">
                   <Button onClick={handleStartGame}>Start Game</Button>
-                  <Button onClick={() => setGameOptionsOpen(true)}>
+                  <Button>
                     <FaCog className="text-white" />
                   </Button>
                 </div>
-                <GameOptionsDialog
-                  setIsOpen={setGameOptionsOpen}
-                  isOpen={gameOptionsOpen}
-                />
               </>
             ) : (
               <p className="text-white">
