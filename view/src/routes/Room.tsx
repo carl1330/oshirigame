@@ -197,10 +197,11 @@ export default function Room() {
         setOshiri((event.data as NewLetterEvent).letter);
         setOshiriActive(false);
         break;
-      case Error:
+      case Error: {
         const error = event.data as NewMessage;
         toast.error(error.message);
         navigate("/");
+      }
     }
   }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
