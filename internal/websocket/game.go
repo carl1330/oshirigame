@@ -24,15 +24,17 @@ type game struct {
 }
 
 type GameState struct {
-	Started     bool      `json:"started"`
-	Round       int       `json:"round"`
-	MaxRounds   int       `json:"maxRounds"`
-	Time        int       `json:"time"`
-	PlayerQueue []*Player `json:"playerQueue"`
-	Input       string    `json:"input"`
-	Atama       string    `json:"atama"`
-	Oshiri      string    `json:"oshiri"`
-	RoundOver   bool      `json:"roundOver"`
+	Started          bool      `json:"started"`
+	Round            int       `json:"round"`
+	MaxRounds        int       `json:"maxRounds"`
+	Time             int       `json:"time"`
+	RoundTime        int       `json:"roundTime"`
+	WordCombinations int       `json:"wordCombinations"`
+	PlayerQueue      []*Player `json:"playerQueue"`
+	Input            string    `json:"input"`
+	Atama            string    `json:"atama"`
+	Oshiri           string    `json:"oshiri"`
+	RoundOver        bool      `json:"roundOver"`
 	sync.Mutex
 }
 
@@ -62,11 +64,13 @@ func NewGame() *game {
 
 func NewGameState() *GameState {
 	return &GameState{
-		Started:     false,
-		Round:       0,
-		MaxRounds:   10,
-		Time:        25,
-		PlayerQueue: make([]*Player, 0),
+		Started:          false,
+		Round:            0,
+		MaxRounds:        10,
+		Time:             0,
+		RoundTime:        25,
+		WordCombinations: 400,
+		PlayerQueue:      make([]*Player, 0),
 	}
 }
 
@@ -139,7 +143,7 @@ func (g *game) InitializeGame() {
 	g.SetGameStarted(true)
 	g.SetAtama(RandomLetter())
 	g.SetOshiri(RandomLetter())
-	g.SetGameStateTime(25)
+	g.SetGameStateTime(g.GameState.RoundTime)
 	g.SetGameStateInput("")
 	g.SetRoundOver(false)
 }
@@ -147,9 +151,10 @@ func (g *game) InitializeGame() {
 func (g *game) StartRound() {
 	letterTimer := time.NewTimer(3 * time.Second)
 	roundTicker := time.NewTicker(1 * time.Second)
+	g.SetGameStarted(true)
 	g.SetGameRunning(true)
 	g.SetRoundOver(false)
-	g.SetGameStateTime(25)
+	g.SetGameStateTime(g.GameState.RoundTime)
 	g.SetGameStateInput("")
 
 	//Generate random letters and check if that combination of letters has more than 400 possible words
@@ -157,7 +162,7 @@ func (g *game) StartRound() {
 	for {
 		g.SetAtama(RandomLetter())
 		g.SetOshiri(RandomLetter())
-		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) > 400 {
+		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) >= g.GameState.WordCombinations {
 			break
 		}
 	}
@@ -170,7 +175,7 @@ func (g *game) StartRound() {
 
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
-	for i := 0; i < 25; i++ {
+	for i := g.GameState.RoundTime; i > 0; i-- {
 		<-roundTicker.C
 		g.DecreaseTime()
 		g.BroadcastGameState()
@@ -336,6 +341,24 @@ func (g *game) IncrementRound() {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	g.GameState.Round++
+}
+
+func (g *game) SetMaxRounds(maxRounds int) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.MaxRounds = maxRounds
+}
+
+func (g *game) SetWordCombinations(min int) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.WordCombinations = min
+}
+
+func (g *game) SetRoundTime(time int) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.RoundTime = time
 }
 
 func (p *Player) SetPlayerScore(score int) {

@@ -17,19 +17,19 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	JOIN_GAME         = "JOIN_GAME"
-	START_GAME        = "START_GAME"
-	ROUND_START       = "ROUND_START"
-	ROUND_ATAMA       = "ROUND_ATAMA"
-	ROUND_OSHIRI      = "ROUND_OSHIRI"
-	NEXT_ROUND        = "NEXT_ROUND"
-	GAME_STATE        = "GAME_STATE"
-	NEW_CLIENT        = "NEW_CLIENT"
-	PLAYER_STATE      = "PLAYER_STATE"
-	PLAYER_INPUT      = "PLAYER_INPUT"
-	ROUND_FINISHED    = "ROUND_FINISHED"
-	USERNAME_TOO_LONG = "USERNAME_TOO_LONG"
-	ERROR             = "ERROR"
+	JOIN_GAME           = "JOIN_GAME"
+	START_GAME          = "START_GAME"
+	ROUND_START         = "ROUND_START"
+	ROUND_ATAMA         = "ROUND_ATAMA"
+	ROUND_OSHIRI        = "ROUND_OSHIRI"
+	NEXT_ROUND          = "NEXT_ROUND"
+	GAME_STATE          = "GAME_STATE"
+	NEW_CLIENT          = "NEW_CLIENT"
+	PLAYER_STATE        = "PLAYER_STATE"
+	PLAYER_INPUT        = "PLAYER_INPUT"
+	ROUND_FINISHED      = "ROUND_FINISHED"
+	UPDATE_GAME_OPTIONS = "UPDATE_GAME_OPTIONS"
+	ERROR               = "ERROR"
 )
 
 type handler struct {
@@ -56,6 +56,12 @@ type PlayerInputMessage struct {
 	Id    string
 	Token string
 	Input string
+}
+
+type GameOptionsUpdateMessage struct {
+	MaxRounds           int
+	RoundTime           int
+	MinWordCombinations int
 }
 
 type RoundOverResponse struct {
@@ -118,8 +124,13 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 	}
 
 	if len(joinRoomMessage.Username) > 20 {
+		errMsg := &ErrorResponse{
+			Message: "Username too long",
+		}
+		data, _ := json.Marshal(errMsg)
 		c.send <- &Message{
-			Type: USERNAME_TOO_LONG,
+			Type: ERROR,
+			Data: data,
 		}
 		return fmt.Errorf("username too long")
 	}
@@ -264,6 +275,29 @@ func (h *hub) PlayerInput(m *Message, c *client) error {
 	game.GameState.Lock()
 	game.GameState.Input = strings.ToLower(playerInputMessage.Input)
 	game.GameState.Unlock()
+
+	game.BroadcastGameState()
+
+	return nil
+}
+
+func (h *hub) UpdateGameOptions(m *Message, c *client) error {
+	var gameOptionsUpdateMessage GameOptionsUpdateMessage
+	err := json.Unmarshal(m.Data, &gameOptionsUpdateMessage)
+
+	if err != nil {
+		return fmt.Errorf("error unmarshalling json")
+	}
+
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	game.SetMaxRounds(gameOptionsUpdateMessage.MaxRounds)
+	game.SetWordCombinations(gameOptionsUpdateMessage.MinWordCombinations)
+	game.SetRoundTime(gameOptionsUpdateMessage.RoundTime)
 
 	game.BroadcastGameState()
 
