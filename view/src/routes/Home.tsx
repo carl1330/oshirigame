@@ -1,5 +1,4 @@
 import Footer from "../components/Footer";
-import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";

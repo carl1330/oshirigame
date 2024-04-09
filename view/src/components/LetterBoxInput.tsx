@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+// @ts-ignore
 import useSound from "use-sound";
 
 import clickSound from "../../public/sounds/click1.ogg";
