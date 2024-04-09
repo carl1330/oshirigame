@@ -12,6 +12,7 @@ import LetterBoxView from "../components/LetterBoxView";
 import LetterRandomizer from "../components/LetterRandomizer";
 import LetterBoxFinished from "../components/LetterBoxFinished";
 import { FaCog } from "react-icons/fa";
+import GameOptionsDialog from "../components/GameOptionsDialog";
 
 export type Event = {
   type: string;
@@ -22,6 +23,9 @@ export type GameState = {
   started: boolean;
   time: number;
   round: number;
+  maxRounds: number;
+  wordCombinations: number;
+  roundTime: number;
   playerQueue: Player[];
   input: string;
   atama: string;
@@ -60,6 +64,12 @@ interface NewLetterEvent {
   letter: string;
 }
 
+export interface GameOptionsEvent {
+  maxRounds: number;
+  minWordCombinations: number;
+  roundTime: number;
+}
+
 interface RoundOverResponse {
   topWords: string[];
   gameState: GameState;
@@ -75,6 +85,7 @@ export type Message =
   | RoundOverResponse
   | NewLetterEvent
   | NewMessage
+  | GameOptionsEvent
   | null;
 
 export const EventJoinGame = "JOIN_GAME";
@@ -90,6 +101,7 @@ export const EventRoundFinished = "ROUND_FINISHED";
 export const EventUsernameTooLong = "USERNAME_TOO_LONG";
 export const EventRoundAtama = "ROUND_ATAMA";
 export const EventRoundOshiri = "ROUND_OSHIRI";
+export const EventUpdateGameOptions = "UPDATE_GAME_OPTIONS";
 export const Error = "ERROR";
 
 export default function Room() {
@@ -108,6 +120,7 @@ export default function Room() {
   const [finishedWord, setFinishedWord] = useState<string>("");
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
+  const [gamePropsOpen, setGamePropsOpen] = useState(false);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -115,7 +128,7 @@ export default function Room() {
     onClose: (e) => {
       console.log(e);
       toast.info(`Disconnected from gameroom ${gameId}`);
-      //navigate("/");
+      navigate("/");
     },
   });
 
@@ -315,6 +328,9 @@ export default function Room() {
         {gameState.started ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
             <h1 className="text-white text-3xl font-bold">
+              Round: {gameState.round}
+            </h1>
+            <h1 className="text-white text-3xl font-bold">
               {roundOver ? (
                 "Round Over"
               ) : (
@@ -392,9 +408,17 @@ export default function Room() {
               <>
                 <div className="flex flex-col items-center gap-2">
                   <Button onClick={handleStartGame}>Start Game</Button>
-                  <Button>
+                  <Button onClick={() => setGamePropsOpen(true)}>
                     <FaCog className="text-white" />
                   </Button>
+                  <GameOptionsDialog
+                    currentMaxRounds={gameState.maxRounds}
+                    currentRoundTime={gameState.roundTime}
+                    currentMinWordCombos={gameState.wordCombinations}
+                    isOpen={gamePropsOpen}
+                    setIsOpen={setGamePropsOpen}
+                    sendEvent={sendEvent}
+                  />
                 </div>
               </>
             ) : (
