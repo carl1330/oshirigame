@@ -6,11 +6,13 @@ import { getWsConfig } from "../misc/server.conf";
 import { useLocalStorage } from "usehooks-ts";
 import PlayerCard from "../components/PlayerCard";
 import Button from "../components/Button";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import LetterBoxInput from "../components/LetterBoxInput";
 import LetterBoxView from "../components/LetterBoxView";
 import LetterRandomizer from "../components/LetterRandomizer";
 import LetterBoxFinished from "../components/LetterBoxFinished";
+import { FaCog } from "react-icons/fa";
+import GameOptionsDialog from "../components/GameOptionsDialog";
 
 export type Event = {
   type: string;
@@ -107,6 +109,7 @@ export default function Room() {
   const [finishedWord, setFinishedWord] = useState<string>("");
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
+  const [gameOptionsOpen, setGameOptionsOpen] = useState(false);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -114,7 +117,7 @@ export default function Room() {
     onClose: (e) => {
       console.log(e);
       toast.info(`Disconnected from gameroom ${gameId}`);
-      navigate("/");
+      //navigate("/");
     },
   });
 
@@ -387,7 +390,18 @@ export default function Room() {
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
             <h1 className="text-white text-3xl font-bold">Room: {gameId}</h1>
             {player.isLeader ? (
-              <Button onClick={handleStartGame}>Start Game</Button>
+              <>
+                <div className="flex flex-col items-center gap-2">
+                  <Button onClick={handleStartGame}>Start Game</Button>
+                  <Button onClick={() => setGameOptionsOpen(true)}>
+                    <FaCog className="text-white" />
+                  </Button>
+                </div>
+                <GameOptionsDialog
+                  setIsOpen={setGameOptionsOpen}
+                  isOpen={gameOptionsOpen}
+                />
+              </>
             ) : (
               <p className="text-white">
                 Waiting for {gameState.playerQueue[0].username} to start the

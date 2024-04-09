@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import useSound from "use-sound";
+
+import clickSound from "../../public/sounds/click1.ogg";
+import clackSound from "../../public/sounds/backspace.ogg";
 
 interface LetterBoxProps {
   text: string;
@@ -10,9 +14,27 @@ interface LetterBoxProps {
 
 export default function LetterBoxInput(props: LetterBoxProps) {
   const [inputWidth, setInputWidth] = useState(64);
+  const [playbackRate, setPlaybackRate] = useState(0.75);
+  const [inputSound] = useSound(clickSound, {
+    playbackRate,
+    interrupt: true,
+  });
+  const [backspaceSound] = useSound(clackSound, {
+    playbackRate,
+    interrupt: true,
+  });
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     props.setText(e.target.value.toUpperCase());
     setInputWidth(e.target.value.length * 64);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
+    if (e.code == "Backspace") {
+      backspaceSound();
+    } else {
+      inputSound();
+    }
   };
 
   const ref = useRef<HTMLInputElement>(null);
@@ -31,6 +53,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
         type="text"
         value={props.text}
         onChange={handleChange}
+        onKeyDown={handleKeyPress}
         className="w-full border border-gray-300 rounded-md px-4 py-2 outline-none"
         placeholder="Type here..."
         style={{
