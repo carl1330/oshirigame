@@ -94,7 +94,7 @@ export const Error = "ERROR";
 export default function Room() {
   const { gameId } = useParams();
   const [token, setToken] = useLocalStorage("token", "");
-  const [username, setUsername] = useLocalStorage("username", "");
+  const [username, setUsername] = useState("");
   const [gameState, setGameState] = useState<GameState>();
   const [topWords, setTopWords] = useState<string[]>([]);
   const [player, setPlayer] = useState<Player>();
@@ -200,15 +200,6 @@ export default function Room() {
         navigate("/");
     }
   }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (gameId != undefined && username != "" && token != "")
-      sendEvent(EventJoinGame, {
-        username: username,
-        id: gameId,
-        token: token,
-      });
-  }, [token]);
 
   useEffect(() => {
     if (player && gameId) {
