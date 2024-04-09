@@ -4,6 +4,7 @@ import "react-toastify/dist/ReactToastify.css";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";
 import { getHttpConfig } from "../misc/server.conf";
+import { FaPlay } from "react-icons/fa";
 
 export interface GamePreferences {
   token: string;
@@ -29,7 +30,9 @@ export default function Home() {
         <div className="flex grow justify-center">
           <div className="flex flex-col gap-4 justify-center items-center h-full w-full rounded-xl bg-[#212121]">
             <h1 className="text-white text-3xl font-bold">Oshirigame</h1>
-            <Button onClick={handleCreateRoom}>Play</Button>
+            <Button onClick={handleCreateRoom}>
+              <FaPlay />
+            </Button>
           </div>
         </div>
         <Footer />
