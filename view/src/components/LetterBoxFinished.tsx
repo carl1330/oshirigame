@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { useEffect } from "react";
 import { useSound } from "use-sound";
 import wordSuccessSound from "../../public/sounds/confirmation_001.ogg";
 import wordFailureSound from "../../public/sounds/error_003.ogg";
@@ -9,11 +8,12 @@ interface LetterBoxProps {
 }
 
 export default function LetterBoxFinished(props: LetterBoxProps) {
-  const [successSound] = useSound(wordSuccessSound);
-  const [failSound] = useSound(wordFailureSound);
-  useEffect(() => {
-    console.log(props.wordAccepted);
-  }, [props.wordAccepted]);
+  const [successSound] = useSound(wordSuccessSound, {
+    volume: 0.7,
+  });
+  const [failSound] = useSound(wordFailureSound, {
+    volume: 0.7,
+  });
 
   if (props.wordAccepted) {
     successSound();
@@ -39,25 +39,25 @@ export default function LetterBoxFinished(props: LetterBoxProps) {
         )}
       </motion.div>
     );
+  } else {
+    failSound();
+    return (
+      <div className="flex justify-start items-center pointer-events-none z-0 gap-2">
+        {props.text.length > 0 ? (
+          props.text.split("").map((letter, index) => (
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], backgroundColor: "darkred" }}
+              transition={{ duration: 0.3 }}
+              key={index}
+              className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center"
+            >
+              {letter}
+            </motion.div>
+          ))
+        ) : (
+          <div className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center" />
+        )}
+      </div>
+    );
   }
-
-  failSound();
-  return (
-    <div className="flex justify-start items-center pointer-events-none z-0 gap-2">
-      {props.text.length > 0 ? (
-        props.text.split("").map((letter, index) => (
-          <motion.div
-            animate={{ scale: [1, 1.2, 1], backgroundColor: "darkred" }}
-            transition={{ duration: 0.3 }}
-            key={index}
-            className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center"
-          >
-            {letter}
-          </motion.div>
-        ))
-      ) : (
-        <div className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center" />
-      )}
-    </div>
-  );
 }
