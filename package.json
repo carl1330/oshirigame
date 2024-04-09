@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@headlessui/react": "^1.7.18",
-    "use-sound": "^4.0.1"
-  }
-}
