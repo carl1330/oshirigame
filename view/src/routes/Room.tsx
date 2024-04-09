@@ -275,7 +275,6 @@ export default function Room() {
             </div>
           </div>
           <Footer />
-          <ToastContainer />
         </div>
       </div>
     );
@@ -291,7 +290,6 @@ export default function Room() {
           <div className="flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl"></div>
         </div>
         <Footer />
-        <ToastContainer />
       </div>
     );
   }
@@ -411,7 +409,6 @@ export default function Room() {
         </div>
       </div>
       <Footer />
-      <ToastContainer />
     </div>
   );
 }
