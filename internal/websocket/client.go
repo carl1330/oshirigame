@@ -27,7 +27,7 @@ const (
 type client struct {
 	token  string
 	gameId string
-	conn   *websocket.Conn
+	Conn   *websocket.Conn
 	send   chan *Message
 	sync.Mutex
 }
@@ -36,7 +36,7 @@ func NewClient(conn *websocket.Conn, token string) *client {
 	return &client{
 		token:  token,
 		gameId: "",
-		conn:   conn,
+		Conn:   conn,
 		send:   make(chan *Message),
 	}
 }
@@ -44,17 +44,17 @@ func NewClient(conn *websocket.Conn, token string) *client {
 func (c *client) ReadPump(h *hub) {
 	defer func() {
 		h.unregister <- c
-		c.conn.Close()
+		c.Conn.Close()
 	}()
-	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(appData string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetReadLimit(maxMessageSize)
+	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetPongHandler(func(appData string) error {
+		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
 
 	for {
-		_, message, err := c.conn.ReadMessage()
+		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -77,7 +77,7 @@ func (c *client) WritePump(h *hub) {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		c.Conn.Close()
 	}()
 	for {
 		select {
@@ -86,10 +86,10 @@ func (c *client) WritePump(h *hub) {
 				return
 			}
 
-			c.conn.WriteJSON(message)
+			c.Conn.WriteJSON(message)
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}

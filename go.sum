@@ -1,7 +1,5 @@
 github.com/atrox/haikunatorgo/v2 v2.0.1 h1:FCVx2KL2YvZtI1rI9WeEHxeLRrKGr0Dd4wfCJiUXupc=
 github.com/atrox/haikunatorgo/v2 v2.0.1/go.mod h1:BBQmx2o+1Z5poziaHRgddAZKOpijwfKdAmMnSYlFK70=
-github.com/eapache/go-resiliency v1.6.0 h1:CqGDTLtpwuWKn6Nj3uNUdflaq+/kIPsg0gfNzHton30=
-github.com/eapache/go-resiliency v1.6.0/go.mod h1:5yPzW0MIvSe0JDsv0v+DvcjEv2FyD6iZYSs1ZI+iQho=
 github.com/go-chi/chi/v5 v5.0.12 h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=
 github.com/go-chi/chi/v5 v5.0.12/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
 github.com/go-chi/cors v1.2.1 h1:xEC8UT3Rlp2QuWNEr4Fs/c2EAGVKBwy/1vHx3bppil4=

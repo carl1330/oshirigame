@@ -10,14 +10,9 @@ export default function LetterRandomizer(props: LetterRandomizerProps) {
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
-    let counter = 10;
-    const func = () => {
-      clearInterval(interval);
+    setInterval(() => {
       letterRoulette(setLetter);
-      counter += 2;
-      interval = setInterval(func, counter);
-    };
-    let interval = setInterval(func, counter);
+    }, 50);
     if (!props.active) {
       if (props.onFinished) {
         props.onFinished();

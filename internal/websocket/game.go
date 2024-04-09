@@ -129,6 +129,12 @@ func (g *game) GetPlayer(token string) (*Player, error) {
 	return g.players[token], nil
 }
 
+func (g *game) GetStarted() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.Started
+}
+
 func (g *game) InitializeGame() {
 	g.SetGameStarted(true)
 	g.SetAtama(RandomLetter())
@@ -139,10 +145,15 @@ func (g *game) InitializeGame() {
 }
 
 func (g *game) StartRound() {
+	letterTimer := time.NewTimer(3 * time.Second)
+	roundTicker := time.NewTicker(1 * time.Second)
 	g.SetGameRunning(true)
 	g.SetRoundOver(false)
 	g.SetGameStateTime(25)
 	g.SetGameStateInput("")
+
+	//Generate random letters and check if that combination of letters has more than 400 possible words
+	//If not try again until successful
 	for {
 		g.SetAtama(RandomLetter())
 		g.SetOshiri(RandomLetter())
@@ -150,16 +161,17 @@ func (g *game) StartRound() {
 			break
 		}
 	}
-	time.Sleep(3 * time.Second)
-	g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
 
-	time.Sleep(3 * time.Second)
+	<-letterTimer.C
+	g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
+	letterTimer.Reset(3 * time.Second)
+	<-letterTimer.C
 	g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
 
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
 	for i := 0; i < 25; i++ {
-		time.Sleep(1 * time.Second)
+		<-roundTicker.C
 		g.DecreaseTime()
 		g.BroadcastGameState()
 	}
@@ -167,30 +179,33 @@ func (g *game) StartRound() {
 }
 
 func (g *game) FinishRound() {
-	player := g.Dequeue()
-	player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
-	g.Enqueue(player)
+	if len(g.players) > 0 {
+		player := g.Dequeue()
+		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
+		g.Enqueue(player)
 
-	var roundOverResponse RoundOverResponse
-	roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
-	roundOverResponse.Word = g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri
-	roundOverResponse.WordAccepted = g.WordList.IsValidWord(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri)
+		var roundOverResponse RoundOverResponse
+		roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
+		roundOverResponse.Word = g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri
+		roundOverResponse.WordAccepted = g.WordList.IsValidWord(g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri)
 
-	g.SetRoundOver(true)
+		g.SetRoundOver(true)
 
-	g.IncrementRound()
+		g.IncrementRound()
 
-	roundOverResponse.GameState = g.MarsalGameState()
+		roundOverResponse.GameState = g.MarsalGameState()
 
-	data, _ := json.Marshal(roundOverResponse)
+		data, _ := json.Marshal(roundOverResponse)
 
-	g.BroadcastMessage(ROUND_FINISHED, data)
+		g.BroadcastMessage(ROUND_FINISHED, data)
 
-	for _, player := range g.players {
-		g.SendPlayerState(player)
+		for _, player := range g.players {
+			g.SendPlayerState(player)
+		}
+
+		g.SetGameRunning(false)
+
 	}
-
-	g.SetGameRunning(false)
 }
 
 func (g *game) Run() {

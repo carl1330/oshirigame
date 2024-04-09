@@ -2,9 +2,7 @@ package websocket
 
 import (
 	"errors"
-	"fmt"
 	"sync"
-	"time"
 )
 
 type hub struct {
@@ -50,10 +48,15 @@ func (h *hub) Run() {
 			h.clients[client.token] = client
 			h.Unlock()
 		case client := <-h.unregister:
-			h.Lock()
+			if game, ok := h.games[client.gameId]; ok {
+				game.unregister <- client
+				game.Lock()
+				if len(game.players) == 0 {
+					h.removegame <- game
+				}
+				game.Unlock()
+			}
 			delete(h.clients, client.token)
-			h.Unlock()
-			go h.AttemptReconnectGame(client)
 		case game := <-h.addgame:
 			h.Lock()
 			h.games[game.Id] = game
@@ -68,36 +71,6 @@ func (h *hub) Run() {
 			}
 		}
 	}
-}
-
-func (h *hub) AttemptReconnectGame(c *client) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for i := 0; i < 10; i++ {
-		<-ticker.C
-		if _, err := h.GetClient(c.token); err == nil {
-			fmt.Println("client reconnecting")
-			game, err := h.GetGame(c.gameId)
-
-			if err != nil {
-				return
-			}
-
-			game.SendGameState(c)
-
-			return
-		}
-		fmt.Println("client not reconnecting")
-	}
-
-	game, err := h.GetGame(c.gameId)
-	if err != nil {
-		return
-	}
-
-	game.unregister <- c
-	fmt.Println("client unregistered from game with token", c.token)
 }
 
 func (h *hub) GetGame(id string) (*game, error) {

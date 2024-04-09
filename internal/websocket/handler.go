@@ -29,6 +29,7 @@ const (
 	PLAYER_INPUT      = "PLAYER_INPUT"
 	ROUND_FINISHED    = "ROUND_FINISHED"
 	USERNAME_TOO_LONG = "USERNAME_TOO_LONG"
+	ERROR             = "ERROR"
 )
 
 type handler struct {
@@ -64,6 +65,10 @@ type RoundOverResponse struct {
 	WordAccepted bool            `json:"wordAccepted"`
 }
 
+type ErrorResponse struct {
+	Message string `json:"message"`
+}
+
 type MessageHandler func(m *Message, c *client) error
 
 func NewHandler(h *hub) *handler {
@@ -88,13 +93,12 @@ func (h *handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	client := NewClient(conn, token)
 	h.hub.register <- client
 
-	go client.ReadPump(h.hub)
 	go client.WritePump(h.hub)
-
 	client.send <- &Message{
 		Type: NEW_CLIENT,
 		Data: []byte(fmt.Sprintf(`{"token": "%s"}`, token)),
 	}
+	client.ReadPump(h.hub)
 
 }
 
@@ -124,6 +128,24 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 
 	if err != nil {
 		return err
+	}
+
+	if game.GetStarted() {
+		errMsg := &ErrorResponse{
+			Message: "Can't join room, game has already started",
+		}
+
+		data, err := json.Marshal(errMsg)
+
+		if err != nil {
+			return fmt.Errorf("can't join gameroom, game already started")
+		}
+
+		c.send <- &Message{
+			Type: ERROR,
+			Data: data,
+		}
+		return fmt.Errorf("can't join gameroom, game already started")
 	}
 
 	player, err := game.GetPlayer(joinRoomMessage.Token)

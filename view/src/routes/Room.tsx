@@ -47,6 +47,10 @@ interface PlayerInputMessage {
   input: string;
 }
 
+interface NewMessage {
+  message: string;
+}
+
 interface NewClientEvent {
   token: string;
 }
@@ -69,6 +73,7 @@ export type Message =
   | PlayerInputMessage
   | RoundOverResponse
   | NewLetterEvent
+  | NewMessage
   | null;
 
 export const EventJoinGame = "JOIN_GAME";
@@ -84,6 +89,7 @@ export const EventRoundFinished = "ROUND_FINISHED";
 export const EventUsernameTooLong = "USERNAME_TOO_LONG";
 export const EventRoundAtama = "ROUND_ATAMA";
 export const EventRoundOshiri = "ROUND_OSHIRI";
+export const Error = "ERROR";
 
 export default function Room() {
   const { gameId } = useParams();
@@ -104,18 +110,13 @@ export default function Room() {
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
-  const { sendMessage, lastMessage } = useWebSocket(
-    apiConfig + `?token=${token}`,
-    {
-      shouldReconnect: () => true,
-      reconnectInterval: 1000,
-      reconnectAttempts: 5,
-      onReconnectStop: () => {
-        toast.info(`Disconnected from gameroom ${gameId}`);
-        navigate("/");
-      },
-    }
-  );
+  const { getWebSocket, sendMessage, lastMessage } = useWebSocket(apiConfig, {
+    onClose: (e) => {
+      console.log(e);
+      toast.info(`Disconnected from gameroom ${gameId}`);
+      navigate("/");
+    },
+  });
 
   function sendEvent(eventType: string, payload: Message | null) {
     const event: Event = {
@@ -124,8 +125,6 @@ export default function Room() {
     };
     sendMessage(JSON.stringify(event));
   }
-
-  const notify = () => toast("Wow so easy!");
 
   useEffect(() => {
     if (lastMessage === null) {
@@ -137,12 +136,6 @@ export default function Room() {
         console.log("new client");
         const token = (event.data as NewClientEvent).token;
         setToken(token);
-        if (gameId != undefined && username != "")
-          sendEvent(EventJoinGame, {
-            username: username,
-            id: gameId,
-            token: token,
-          });
         break;
       }
       case EventGameStart:
@@ -174,6 +167,7 @@ export default function Room() {
         break;
       case EventRoundFinished: {
         const gameStateFinished = event.data as RoundOverResponse;
+        gameStateFinished.gameState.time = 25;
         setRoundOver(true);
         setTopWords(gameStateFinished.topWords);
         setGameState(gameStateFinished.gameState);
@@ -200,8 +194,21 @@ export default function Room() {
         setOshiri((event.data as NewLetterEvent).letter);
         setOshiriActive(false);
         break;
+      case Error:
+        const error = event.data as NewMessage;
+        toast.error(error.message);
+        navigate("/");
     }
   }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (gameId != undefined && username != "" && token != "")
+      sendEvent(EventJoinGame, {
+        username: username,
+        id: gameId,
+        token: token,
+      });
+  }, [token]);
 
   useEffect(() => {
     if (player && gameId) {
@@ -212,6 +219,39 @@ export default function Room() {
       });
     }
   }, [playerInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    window.addEventListener("beforeunload", (event) => {
+      event.preventDefault();
+      return "";
+    });
+
+    window.addEventListener("popstate", (event) => {
+      event.preventDefault();
+      return "";
+    });
+
+    window.addEventListener("unload", () => {
+      getWebSocket()?.close();
+      navigate("/");
+    });
+
+    return () => {
+      window.addEventListener("beforeunload", (event) => {
+        event.preventDefault();
+        return "";
+      });
+
+      window.addEventListener("onhashchange", (event) => {
+        event.preventDefault();
+        return "";
+      });
+
+      window.addEventListener("unload", () => {
+        getWebSocket()?.close();
+      });
+    };
+  }, []);
 
   function handleJoinRoom(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
@@ -356,9 +396,7 @@ export default function Room() {
           </div>
         ) : (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
-            <h1 onClick={notify} className="text-white text-3xl font-bold">
-              Room: {gameId}
-            </h1>
+            <h1 className="text-white text-3xl font-bold">Room: {gameId}</h1>
             {player.isLeader ? (
               <Button onClick={handleStartGame}>Start Game</Button>
             ) : (
