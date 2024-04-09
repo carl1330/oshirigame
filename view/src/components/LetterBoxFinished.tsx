@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-// @ts-ignore
 import { useSound } from "use-sound";
 import wordSuccessSound from "../../public/sounds/confirmation_001.ogg";
 import wordFailureSound from "../../public/sounds/error_003.ogg";
