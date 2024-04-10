@@ -124,7 +124,7 @@ export default function Room() {
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
-  const { getWebSocket, sendMessage, lastMessage } = useWebSocket(apiConfig, {
+  const { sendMessage, lastMessage } = useWebSocket(apiConfig, {
     onClose: (e) => {
       console.log(e);
       toast.info(`Disconnected from gameroom ${gameId}`);

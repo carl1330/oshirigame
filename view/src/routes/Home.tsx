@@ -11,10 +11,6 @@ export interface GamePreferences {
   token: string;
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export default function Home() {
   const navigate = useNavigate();
   const apiConfig = getHttpConfig();
