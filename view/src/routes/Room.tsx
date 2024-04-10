@@ -232,29 +232,10 @@ export default function Room() {
       return "";
     });
 
-    window.addEventListener("popstate", (event) => {
-      event.preventDefault();
-      return "";
-    });
-
-    window.addEventListener("unload", () => {
-      getWebSocket()?.close();
-      navigate("/");
-    });
-
     return () => {
       window.addEventListener("beforeunload", (event) => {
         event.preventDefault();
         return "";
-      });
-
-      window.addEventListener("onhashchange", (event) => {
-        event.preventDefault();
-        return "";
-      });
-
-      window.addEventListener("unload", () => {
-        getWebSocket()?.close();
       });
     };
   }, []);
