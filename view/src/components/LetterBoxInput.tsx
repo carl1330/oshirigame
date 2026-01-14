@@ -10,6 +10,7 @@ interface LetterBoxProps {
   setText: (text: string) => void;
   disabled: boolean;
   focus: boolean;
+  shouldFocus: boolean; // New prop to control when to show keyboard
 }
 
 export default function LetterBoxInput(props: LetterBoxProps) {
@@ -22,40 +23,65 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     playbackRate,
     interrupt: true,
   });
+  
+  const prevLength = useRef(props.text.length);
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    props.setText(e.target.value.toUpperCase());
+    const newValue = e.target.value.toUpperCase();
+    const newLength = newValue.length;
+    
+    // Play sound
+    setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
+    if (newLength < prevLength.current) {
+      backspaceSound();
+    } else if (newLength > prevLength.current) {
+      inputSound();
+    }
+    prevLength.current = newLength;
+    
+    props.setText(newValue);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
-    if (e.code == "Backspace") {
-      backspaceSound();
-    } else {
-      inputSound();
-    }
   };
 
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    !props.disabled && ref.current?.focus();
-  }, [props.disabled]);
+    if (props.shouldFocus && !props.disabled && ref.current) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        ref.current?.focus();
+      }, 100);
+    } else if (!props.shouldFocus && ref.current) {
+      // Blur the input to hide keyboard
+      ref.current.blur();
+    }
+  }, [props.shouldFocus, props.disabled]);
+
+  const handleBoxClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!props.disabled && ref.current) {
+      ref.current.focus();
+    }
+  };
 
   return (
     <>
       <input
         maxLength={45}
         ref={ref}
-        onBlur={(e) => e.target.focus()}
-        key={"nonleader"}
         type="text"
         value={props.text}
         onChange={handleChange}
         onKeyDown={handleKeyPress}
-        className="absolute opacity-0 pointer-events-auto w-0 h-0"
-        placeholder="Type here..."
+        className="fixed left-0 top-0 opacity-0 pointer-events-auto"
         style={{
           textTransform: "uppercase",
+          width: "1px",
+          height: "1px",
         }}
         disabled={props.disabled}
         inputMode="text"
@@ -70,13 +96,17 @@ export default function LetterBoxInput(props: LetterBoxProps) {
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 0.3 }}
             key={index}
-            className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center flex-shrink-0"
+            onClick={handleBoxClick}
+            className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center flex-shrink-0 cursor-text"
           >
             {letter}
           </motion.div>
         ))
       ) : (
-        <div className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center" />
+        <div 
+          onClick={handleBoxClick}
+          className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center cursor-text"
+        />
       )}
     </>
   );
