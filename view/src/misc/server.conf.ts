@@ -5,23 +5,11 @@ export const devConfig = {
   wsProtocol: "ws",
 };
 
-export const prodConfig = {
-  httpProtocol: "http",
-  host: import.meta.env.VITE_BACKEND_URL || "localhost",
-  port: 8080,
-  wsProtocol: "ws",
-};
-
 export const getWsConfig = () => {
   if (process.env.NODE_ENV === "production") {
-    return (
-      prodConfig.wsProtocol +
-      "://" +
-      prodConfig.host +
-      ":" +
-      prodConfig.port +
-      "/ws"
-    );
+    // Use relative URL in production (same host as frontend)
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.host}/ws`;
   } else {
     return (
       devConfig.wsProtocol +
@@ -36,9 +24,8 @@ export const getWsConfig = () => {
 
 export const getHttpConfig = () => {
   if (process.env.NODE_ENV === "production") {
-    return (
-      prodConfig.httpProtocol + "://" + prodConfig.host + ":" + prodConfig.port
-    );
+    // Use relative URL in production (same host as frontend)
+    return `${window.location.protocol}//${window.location.host}`;
   } else {
     return (
       devConfig.httpProtocol + "://" + devConfig.host + ":" + devConfig.port

@@ -45,8 +45,5 @@ COPY --from=frontend-builder /app/view/dist ./static
 # Expose port 8080
 EXPOSE 8080
 
-# Set environment variable for frontend
-ENV VITE_BACKEND_URL=localhost
-
 # Run the server
 CMD ["./main"]

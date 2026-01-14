@@ -27,6 +27,10 @@ func main() {
 
 	go hub.Run()
 
+	// API routes (must be before static file handler)
+	r.Get("/creategame", handler.CreateGame)
+	r.Get("/ws", handler.ServeWS)
+
 	// Serve static files
 	staticDir := "./static"
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
@@ -34,12 +38,8 @@ func main() {
 		staticDir = "./view/dist"
 	}
 
-	// Serve static files with proper file server
+	// Serve static files for all other routes
 	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(staticDir))))
-
-	// API routes
-	r.Get("/creategame", handler.CreateGame)
-	r.Get("/ws", handler.ServeWS)
 
 	fmt.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", r)
