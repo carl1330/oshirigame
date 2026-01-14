@@ -22,13 +22,13 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     playbackRate,
     interrupt: true,
   });
-  
+
   const prevLength = useRef(props.text.length);
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value.toUpperCase();
     const newLength = newValue.length;
-    
+
     // Play sound
     setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
     if (newLength < prevLength.current) {
@@ -37,11 +37,11 @@ export default function LetterBoxInput(props: LetterBoxProps) {
       inputSound();
     }
     prevLength.current = newLength;
-    
+
     props.setText(newValue);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = () => {
     setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
   };
 
@@ -97,7 +97,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
           </motion.div>
         ))
       ) : (
-        <div 
+        <div
           onClick={handleBoxClick}
           className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center cursor-text"
         />
