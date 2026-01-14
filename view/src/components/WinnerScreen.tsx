@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import Confetti from "react-confetti";
 import Button from "./Button";
 
 export interface PlayerRanking {
@@ -13,6 +15,33 @@ interface WinnerScreenProps {
 }
 
 export default function WinnerScreen(props: WinnerScreenProps) {
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  const [showConfetti, setShowConfetti] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // Stop confetti after 5 seconds
+    const timer = setTimeout(() => {
+      setShowConfetti(false);
+    }, 5000);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearTimeout(timer);
+    };
+  }, []);
+
   const getMedalEmoji = (rank: number) => {
     switch (rank) {
       case 1:
@@ -34,7 +63,16 @@ export default function WinnerScreen(props: WinnerScreenProps) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full gap-6 px-4 py-6">
+    <div className="flex flex-col items-center justify-center w-full h-full gap-6 px-4 py-6 relative">
+      {showConfetti && (
+        <Confetti
+          width={windowSize.width}
+          height={windowSize.height}
+          recycle={false}
+          numberOfPieces={500}
+          gravity={0.3}
+        />
+      )}
       <h1 className="text-white text-3xl sm:text-4xl md:text-5xl font-bold text-center">
         Game Over!
       </h1>

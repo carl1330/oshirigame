@@ -21,6 +21,7 @@
     "local-storage": "^2.0.0",
     "lucide-react": "^0.334.0",
     "react": "^18.2.0",
+    "react-confetti": "^6.4.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.0.1",
     "react-loader-spinner": "^6.1.6",
