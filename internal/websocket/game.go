@@ -187,6 +187,11 @@ func (g *game) FinishRound() {
 	if len(g.players) > 0 {
 		player := g.Dequeue()
 		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
+
+		// Check if this was the last player in the queue (cycle complete)
+		// If queue length is 0 after dequeue, or this player is about to become last in queue
+		wasLastPlayer := len(g.GameState.PlayerQueue) == 0
+
 		g.Enqueue(player)
 
 		var roundOverResponse RoundOverResponse
@@ -196,7 +201,10 @@ func (g *game) FinishRound() {
 
 		g.SetRoundOver(true)
 
-		g.IncrementRound()
+		// Only increment round when we've completed a full cycle (back to the first player)
+		if wasLastPlayer {
+			g.IncrementRound()
+		}
 
 		roundOverResponse.GameState = g.MarsalGameState()
 
@@ -209,6 +217,11 @@ func (g *game) FinishRound() {
 		}
 
 		g.SetGameRunning(false)
+
+		// Check if game is over (max rounds reached)
+		if g.IsGameOver() {
+			g.EndGame()
+		}
 
 	}
 }
@@ -341,6 +354,58 @@ func (g *game) IncrementRound() {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	g.GameState.Round++
+}
+
+func (g *game) IsGameOver() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.Round >= g.GameState.MaxRounds
+}
+
+func (g *game) EndGame() {
+	// Calculate winners by sorting players by score
+	type playerScore struct {
+		username string
+		score    int
+	}
+
+	var scores []playerScore
+	for _, player := range g.players {
+		scores = append(scores, playerScore{
+			username: player.Username,
+			score:    player.GetPlayerScore(),
+		})
+	}
+
+	// Sort by score descending
+	for i := 0; i < len(scores); i++ {
+		for j := i + 1; j < len(scores); j++ {
+			if scores[j].score > scores[i].score {
+				scores[i], scores[j] = scores[j], scores[i]
+			}
+		}
+	}
+
+	// Create rankings (handle ties by giving same rank)
+	var winners []PlayerRanking
+	currentRank := 1
+	for i, ps := range scores {
+		// If not first player and score is different from previous, increment rank
+		if i > 0 && ps.score != scores[i-1].score {
+			currentRank = i + 1
+		}
+		winners = append(winners, PlayerRanking{
+			Username: ps.username,
+			Score:    ps.score,
+			Rank:     currentRank,
+		})
+	}
+
+	var gameOverResponse GameOverResponse
+	gameOverResponse.Winners = winners
+
+	data, _ := json.Marshal(gameOverResponse)
+	g.BroadcastMessage(GAME_OVER, data)
 }
 
 func (g *game) SetMaxRounds(maxRounds int) {

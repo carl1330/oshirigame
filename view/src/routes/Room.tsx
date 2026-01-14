@@ -13,6 +13,7 @@ import LetterRandomizer from "../components/LetterRandomizer";
 import LetterBoxFinished from "../components/LetterBoxFinished";
 import { FaCog } from "react-icons/fa";
 import GameOptionsDialog from "../components/GameOptionsDialog";
+import WinnerScreen, { PlayerRanking } from "../components/WinnerScreen";
 
 export type Event = {
   type: string;
@@ -77,12 +78,17 @@ interface RoundOverResponse {
   word: string;
 }
 
+interface GameOverResponse {
+  winners: PlayerRanking[];
+}
+
 export type Message =
   | GameState
   | JoinGameMessage
   | NewClientEvent
   | PlayerInputMessage
   | RoundOverResponse
+  | GameOverResponse
   | NewLetterEvent
   | NewMessage
   | GameOptionsEvent
@@ -98,6 +104,7 @@ export const EventGameState = "GAME_STATE";
 export const EventRoundStart = "ROUND_START";
 export const EventPlayerInput = "PLAYER_INPUT";
 export const EventRoundFinished = "ROUND_FINISHED";
+export const EventGameOver = "GAME_OVER";
 export const EventUsernameTooLong = "USERNAME_TOO_LONG";
 export const EventRoundAtama = "ROUND_ATAMA";
 export const EventRoundOshiri = "ROUND_OSHIRI";
@@ -121,6 +128,8 @@ export default function Room() {
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
   const [gamePropsOpen, setGamePropsOpen] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [winners, setWinners] = useState<PlayerRanking[]>([]);
   const navigate = useNavigate();
   const apiConfig = getWsConfig();
 
@@ -208,6 +217,12 @@ export default function Room() {
         setOshiri((event.data as NewLetterEvent).letter);
         setOshiriActive(false);
         break;
+      case EventGameOver: {
+        const gameOverData = event.data as GameOverResponse;
+        setGameOver(true);
+        setWinners(gameOverData.winners);
+        break;
+      }
       case Error: {
         const error = event.data as NewMessage;
         toast.error(error.message);
@@ -303,10 +318,21 @@ export default function Room() {
     }
   }
 
-return (
+  function handleBackToLobby() {
+    navigate("/");
+  }
+
+  return (
     <div className="flex flex-col h-screen p-2 gap-2">
       <div className="flex grow w-full gap-2">
-        {gameState.started ? (
+        {gameOver ? (
+          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl">
+            <WinnerScreen 
+              winners={winners} 
+              onBackToLobby={handleBackToLobby}
+            />
+          </div>
+        ) : gameState.started ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-2 py-4">
             <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
               Round: {gameState.round}
@@ -445,20 +471,22 @@ return (
             </div>
           </div>
         )}
-        <div className="hidden sm:flex flex-col gap-2 h-full bg-[#161616] rounded-xl px-2 py-4">
-          <h3 className="text-white text-sm font-semibold text-center">Players</h3>
-          <div className="flex flex-col gap-2 overflow-y-auto flex-1">
-            {gameState.playerQueue.map((value, key) => (
-              <PlayerCard
-                key={key}
-                username={value.username}
-                score={value.score}
-                isLeader={value.isLeader}
-                isCurrentPlayer={true}
-              />
-            ))}
+        {!gameOver && (
+          <div className="hidden sm:flex flex-col gap-2 h-full bg-[#161616] rounded-xl px-2 py-4">
+            <h3 className="text-white text-sm font-semibold text-center">Players</h3>
+            <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+              {gameState.playerQueue.map((value, key) => (
+                <PlayerCard
+                  key={key}
+                  username={value.username}
+                  score={value.score}
+                  isLeader={value.isLeader}
+                  isCurrentPlayer={true}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <Footer />
     </div>

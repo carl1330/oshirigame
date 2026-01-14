@@ -29,6 +29,7 @@ const (
 	PLAYER_INPUT        = "PLAYER_INPUT"
 	ROUND_FINISHED      = "ROUND_FINISHED"
 	UPDATE_GAME_OPTIONS = "UPDATE_GAME_OPTIONS"
+	GAME_OVER           = "GAME_OVER"
 	ERROR               = "ERROR"
 )
 
@@ -69,6 +70,16 @@ type RoundOverResponse struct {
 	GameState    json.RawMessage `json:"gameState"`
 	Word         string          `json:"word"`
 	WordAccepted bool            `json:"wordAccepted"`
+}
+
+type GameOverResponse struct {
+	Winners []PlayerRanking `json:"winners"`
+}
+
+type PlayerRanking struct {
+	Username string `json:"username"`
+	Score    int    `json:"score"`
+	Rank     int    `json:"rank"`
 }
 
 type ErrorResponse struct {
