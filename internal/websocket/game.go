@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math/rand"
@@ -12,14 +13,16 @@ import (
 )
 
 type game struct {
-	Id         string `json:"id"`
-	players    map[string]*Player
-	GameState  *GameState
-	WordList   *oshirigame.WordList
-	register   chan *Player
-	unregister chan *client
-	broadcast  chan *Message
-	running    bool
+	Id          string `json:"id"`
+	players     map[string]*Player
+	GameState   *GameState
+	WordList    *oshirigame.WordList
+	register    chan *Player
+	unregister  chan *client
+	broadcast   chan *Message
+	running     bool
+	roundCtx    context.Context
+	cancelRound context.CancelFunc
 	sync.Mutex
 }
 
@@ -150,8 +153,17 @@ func (g *game) InitializeGame() {
 }
 
 func (g *game) StartRound() {
+	// Create a new context for this round that can be cancelled
+	g.Lock()
+	g.roundCtx, g.cancelRound = context.WithCancel(context.Background())
+	ctx := g.roundCtx
+	g.Unlock()
+
 	letterTimer := time.NewTimer(3 * time.Second)
 	roundTicker := time.NewTicker(1 * time.Second)
+	defer letterTimer.Stop()
+	defer roundTicker.Stop()
+
 	g.SetGameStarted(true)
 	g.SetGameRunning(true)
 	g.SetRoundOver(false)
@@ -168,19 +180,36 @@ func (g *game) StartRound() {
 		}
 	}
 
-	<-letterTimer.C
-	g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
+	// Wait for letter timer or cancellation
+	select {
+	case <-letterTimer.C:
+		g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
+	case <-ctx.Done():
+		return // Round cancelled
+	}
+
 	letterTimer.Reset(3 * time.Second)
-	<-letterTimer.C
-	g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
+	select {
+	case <-letterTimer.C:
+		g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
+	case <-ctx.Done():
+		return // Round cancelled
+	}
 
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
+
+	// Round timer with cancellation support
 	for i := g.GameState.RoundTime; i > 0; i-- {
-		<-roundTicker.C
-		g.DecreaseTime()
-		g.BroadcastGameState()
+		select {
+		case <-roundTicker.C:
+			g.DecreaseTime()
+			g.BroadcastGameState()
+		case <-ctx.Done():
+			return // Round cancelled
+		}
 	}
+
 	g.FinishRound()
 }
 
@@ -416,6 +445,15 @@ func (g *game) EndGame() {
 }
 
 func (g *game) ResetToLobby() {
+	// Cancel any running round
+	g.Lock()
+	if g.cancelRound != nil {
+		g.cancelRound()
+		g.cancelRound = nil
+		g.roundCtx = nil
+	}
+	g.Unlock()
+
 	// Reset game state to initial lobby state
 	g.GameState.Lock()
 	g.GameState.Started = false
@@ -427,6 +465,9 @@ func (g *game) ResetToLobby() {
 	g.GameState.RoundOver = false
 	g.GameState.TurnCount = 0
 	g.GameState.Unlock()
+
+	// Reset running flag
+	g.SetGameRunning(false)
 
 	// Reset all player scores
 	for _, player := range g.players {
