@@ -172,6 +172,22 @@ export default function Room() {
       case EventGameState: {
         const gameState = event.data as GameState;
         setGameState(gameState);
+        
+        // If game was reset to lobby (not started), clear all game-specific state
+        if (!gameState.started) {
+          setGameOver(false);
+          setWinners([]);
+          setRoundOver(false);
+          setPlayerInput("");
+          setAtamaActive(false);
+          setOshiriActive(false);
+          setAtama("");
+          setOshiri("");
+          setFinishedWord("");
+          setWordAccepted(false);
+          setTopWords([]);
+        }
+        
         if (player && !player.isLeader) {
           setPlayerInput(gameState.input);
         }
@@ -374,7 +390,7 @@ export default function Room() {
             </button>
 
             <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
-              Round: {gameState.round}
+              Round {gameState.round}/{gameState.maxRounds}
             </h1>
             <h1 className="text-white text-lg sm:text-xl md:text-3xl font-bold text-center">
               {roundOver ? (

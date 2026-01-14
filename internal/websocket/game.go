@@ -214,6 +214,11 @@ func (g *game) StartRound() {
 }
 
 func (g *game) FinishRound() {
+	// Check if game is still running (not cancelled)
+	if !g.IsRunning() {
+		return
+	}
+
 	if len(g.players) > 0 {
 		player := g.Dequeue()
 		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
@@ -445,14 +450,19 @@ func (g *game) EndGame() {
 }
 
 func (g *game) ResetToLobby() {
-	// Cancel any running round
+	// Cancel any running round and wait for it to finish
 	g.Lock()
 	if g.cancelRound != nil {
 		g.cancelRound()
+		// Give the goroutine time to exit cleanly
+		time.Sleep(100 * time.Millisecond)
 		g.cancelRound = nil
 		g.roundCtx = nil
 	}
 	g.Unlock()
+
+	// Reset running flag first to prevent new rounds from starting
+	g.SetGameRunning(false)
 
 	// Reset game state to initial lobby state
 	g.GameState.Lock()
@@ -466,13 +476,15 @@ func (g *game) ResetToLobby() {
 	g.GameState.TurnCount = 0
 	g.GameState.Unlock()
 
-	// Reset running flag
-	g.SetGameRunning(false)
-
-	// Reset all player scores
+	// Reset all player scores but keep them in the game
+	g.Lock()
 	for _, player := range g.players {
 		player.SetPlayerScore(0)
 	}
+	g.Unlock()
+
+	// Broadcast updated game state to all players
+	g.BroadcastGameState()
 
 	// Send updated player states to all players
 	for _, player := range g.players {
