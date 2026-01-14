@@ -11,6 +11,7 @@ export interface PlayerRanking {
 
 interface WinnerScreenProps {
   winners: PlayerRanking[];
+  isLeader?: boolean;
   onNewGame?: () => void;
   onBackToLobby?: () => void;
 }
@@ -190,10 +191,14 @@ export default function WinnerScreen(props: WinnerScreenProps) {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md mt-4">
-        {props.onBackToLobby && (
+        {props.isLeader && props.onBackToLobby ? (
           <Button onClick={props.onBackToLobby} className="flex-1 py-3">
             Back to Lobby
           </Button>
+        ) : (
+          <p className="text-white text-center text-sm sm:text-base px-4">
+            Waiting for leader to start new game...
+          </p>
         )}
       </div>
     </div>

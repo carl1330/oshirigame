@@ -415,6 +415,30 @@ func (g *game) EndGame() {
 	g.BroadcastMessage(GAME_OVER, data)
 }
 
+func (g *game) ResetToLobby() {
+	// Reset game state to initial lobby state
+	g.GameState.Lock()
+	g.GameState.Started = false
+	g.GameState.Round = 1
+	g.GameState.Time = 0
+	g.GameState.Input = ""
+	g.GameState.Atama = ""
+	g.GameState.Oshiri = ""
+	g.GameState.RoundOver = false
+	g.GameState.TurnCount = 0
+	g.GameState.Unlock()
+
+	// Reset all player scores
+	for _, player := range g.players {
+		player.SetPlayerScore(0)
+	}
+
+	// Send updated player states to all players
+	for _, player := range g.players {
+		g.SendPlayerState(player)
+	}
+}
+
 func (g *game) SetMaxRounds(maxRounds int) {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()

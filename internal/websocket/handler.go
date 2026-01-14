@@ -30,6 +30,7 @@ const (
 	ROUND_FINISHED      = "ROUND_FINISHED"
 	UPDATE_GAME_OPTIONS = "UPDATE_GAME_OPTIONS"
 	GAME_OVER           = "GAME_OVER"
+	RESET_GAME          = "RESET_GAME"
 	ERROR               = "ERROR"
 )
 
@@ -310,6 +311,33 @@ func (h *hub) UpdateGameOptions(m *Message, c *client) error {
 	game.SetWordCombinations(gameOptionsUpdateMessage.MinWordCombinations)
 	game.SetRoundTime(gameOptionsUpdateMessage.RoundTime)
 
+	game.BroadcastGameState()
+
+	return nil
+}
+
+func (h *hub) ResetGame(m *Message, c *client) error {
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	player, err := game.GetPlayer(c.token)
+
+	if err != nil {
+		return err
+	}
+
+	// Only leader can reset the game
+	if !player.IsLeader {
+		return fmt.Errorf("only leader can reset game")
+	}
+
+	// Reset game to lobby state
+	game.ResetToLobby()
+
+	// Broadcast updated game state to all players
 	game.BroadcastGameState()
 
 	return nil

@@ -12,7 +12,9 @@ import LetterBoxView from "../components/LetterBoxView";
 import LetterRandomizer from "../components/LetterRandomizer";
 import LetterBoxFinished from "../components/LetterBoxFinished";
 import { FaCog } from "react-icons/fa";
+import { HiMenu } from "react-icons/hi";
 import GameOptionsDialog from "../components/GameOptionsDialog";
+import GameMenu from "../components/GameMenu";
 import WinnerScreen, { PlayerRanking } from "../components/WinnerScreen";
 
 export type Event = {
@@ -105,6 +107,7 @@ export const EventRoundStart = "ROUND_START";
 export const EventPlayerInput = "PLAYER_INPUT";
 export const EventRoundFinished = "ROUND_FINISHED";
 export const EventGameOver = "GAME_OVER";
+export const EventResetGame = "RESET_GAME";
 export const EventUsernameTooLong = "USERNAME_TOO_LONG";
 export const EventRoundAtama = "ROUND_ATAMA";
 export const EventRoundOshiri = "ROUND_OSHIRI";
@@ -128,6 +131,7 @@ export default function Room() {
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
   const [focus, setFocus] = useState(false);
   const [gamePropsOpen, setGamePropsOpen] = useState(false);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [winners, setWinners] = useState<PlayerRanking[]>([]);
   const navigate = useNavigate();
@@ -319,6 +323,32 @@ export default function Room() {
   }
 
   function handleBackToLobby() {
+    if (gameId && player?.isLeader) {
+      // Reset game state locally
+      setGameOver(false);
+      setWinners([]);
+      setRoundOver(false);
+      setPlayerInput("");
+      setAtamaActive(false);
+      setOshiriActive(false);
+      setAtama("");
+      setOshiri("");
+      setFinishedWord("");
+      setWordAccepted(false);
+      setTopWords([]);
+      
+      // Send reset event to backend
+      sendEvent(EventResetGame, null);
+    }
+  }
+
+  function handleCancelGame() {
+    // Same as back to lobby - reset game to lobby state
+    handleBackToLobby();
+  }
+
+  function handleLeaveRoom() {
+    // Navigate back to home page
     navigate("/");
   }
 
@@ -328,12 +358,21 @@ export default function Room() {
         {gameOver ? (
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl">
             <WinnerScreen 
-              winners={winners} 
+              winners={winners}
+              isLeader={player?.isLeader || false}
               onBackToLobby={handleBackToLobby}
             />
           </div>
         ) : gameState.started ? (
-          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-2 py-4">
+          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-2 py-4 relative">
+            {/* Menu Button */}
+            <button 
+              onClick={() => setGameMenuOpen(true)} 
+              className="absolute top-2 right-2 sm:top-4 sm:right-4 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full bg-[#3F3F3F] hover:bg-[#4F4F4F] active:scale-95 transition-transform text-white z-10"
+            >
+              <HiMenu className="text-xl sm:text-2xl" />
+            </button>
+
             <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
               Round: {gameState.round}
             </h1>
@@ -425,7 +464,15 @@ export default function Room() {
             </div>
           </div>
         ) : (
-          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-4 py-6">
+          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-4 py-6 relative">
+            {/* Menu Button for Lobby */}
+            <button 
+              onClick={() => setGameMenuOpen(true)} 
+              className="absolute top-2 right-2 sm:top-4 sm:right-4 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full bg-[#3F3F3F] hover:bg-[#4F4F4F] active:scale-95 transition-transform text-white"
+            >
+              <HiMenu className="text-xl sm:text-2xl" />
+            </button>
+
             <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">Room: {gameId}</h1>
             {player.isLeader ? (
               <>
@@ -489,6 +536,16 @@ export default function Room() {
         )}
       </div>
       <Footer />
+      
+      {/* Game Menu */}
+      <GameMenu
+        isOpen={gameMenuOpen}
+        setIsOpen={setGameMenuOpen}
+        isLeader={player?.isLeader || false}
+        gameStarted={gameState?.started || false}
+        onCancelGame={handleCancelGame}
+        onLeaveRoom={handleLeaveRoom}
+      />
     </div>
   );
 }

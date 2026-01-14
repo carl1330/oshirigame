@@ -38,6 +38,7 @@ func NewHub() *hub {
 	h.handlers[PLAYER_INPUT] = h.PlayerInput
 	h.handlers[NEXT_ROUND] = h.NextRound
 	h.handlers[UPDATE_GAME_OPTIONS] = h.UpdateGameOptions
+	h.handlers[RESET_GAME] = h.ResetGame
 	return h
 }
 
