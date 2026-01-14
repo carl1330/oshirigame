@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/carl1330/oshirigame/internal/websocket"
 	"github.com/go-chi/chi/v5"
@@ -38,8 +40,27 @@ func main() {
 		staticDir = "./view/dist"
 	}
 
-	// Serve static files for all other routes
-	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(staticDir))))
+	// Create a file server for static assets
+	fileServer := http.FileServer(http.Dir(staticDir))
+
+	// Serve static files and SPA routes
+	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Check if it's a static file (has extension)
+		if strings.Contains(path, ".") {
+			// Try to serve the static file
+			filePath := filepath.Join(staticDir, path)
+			if _, err := os.Stat(filePath); err == nil {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// For all other routes (SPA routes), serve index.html
+		indexPath := filepath.Join(staticDir, "index.html")
+		http.ServeFile(w, r, indexPath)
+	})
 
 	fmt.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", r)

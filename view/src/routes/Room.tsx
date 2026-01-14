@@ -383,9 +383,9 @@ return (
             )}
             
             {/* Mobile players list */}
-            <div className="sm:hidden flex flex-col gap-2 w-full">
+            <div className="sm:hidden flex flex-col gap-2 w-full max-w-md">
               <h3 className="text-white text-sm font-semibold text-center">Players</h3>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
                 {gameState.playerQueue.map((value, key) => (
                   <PlayerCard
                     key={key}
@@ -403,11 +403,14 @@ return (
             <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">Room: {gameId}</h1>
             {player.isLeader ? (
               <>
-                <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                <div className="flex flex-col items-center gap-3 w-full max-w-xs">
                   <Button onClick={handleStartGame} className="w-full py-3">Start Game</Button>
-                  <Button onClick={() => setGamePropsOpen(true)} className="w-full py-3">
-                    <FaCog className="text-white" />
-                  </Button>
+                  <button 
+                    onClick={() => setGamePropsOpen(true)} 
+                    className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-purple-700 hover:bg-purple-800 active:scale-95 transition-transform text-white"
+                  >
+                    <FaCog className="text-xl" />
+                  </button>
                   <GameOptionsDialog
                     currentMaxRounds={gameState.maxRounds}
                     currentRoundTime={gameState.roundTime}
@@ -424,18 +427,37 @@ return (
                 game
               </p>
             )}
+            
+            {/* Mobile players list for lobby */}
+            <div className="sm:hidden flex flex-col gap-2 w-full max-w-md mt-4">
+              <h3 className="text-white text-sm font-semibold text-center">Players in Lobby</h3>
+              <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                {gameState.playerQueue.map((value, key) => (
+                  <PlayerCard
+                    key={key}
+                    username={value.username}
+                    score={value.score}
+                    isLeader={value.isLeader}
+                    isCurrentPlayer={true}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         )}
-        <div className="hidden sm:flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl px-2">
-          {gameState.playerQueue.map((value, key) => (
-            <PlayerCard
-              key={key}
-              username={value.username}
-              score={value.score}
-              isLeader={value.isLeader}
-              isCurrentPlayer={true}
-            />
-          ))}
+        <div className="hidden sm:flex flex-col gap-2 h-full bg-[#161616] rounded-xl px-2 py-4">
+          <h3 className="text-white text-sm font-semibold text-center">Players</h3>
+          <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+            {gameState.playerQueue.map((value, key) => (
+              <PlayerCard
+                key={key}
+                username={value.username}
+                score={value.score}
+                isLeader={value.isLeader}
+                isCurrentPlayer={true}
+              />
+            ))}
+          </div>
         </div>
       </div>
       <Footer />
