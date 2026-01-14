@@ -44,7 +44,7 @@ func main() {
 	fileServer := http.FileServer(http.Dir(staticDir))
 
 	// Serve static files and SPA routes
-	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		// Check if it's a static file (has extension)
