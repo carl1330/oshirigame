@@ -35,6 +35,7 @@ type GameState struct {
 	Atama            string    `json:"atama"`
 	Oshiri           string    `json:"oshiri"`
 	RoundOver        bool      `json:"roundOver"`
+	TurnCount        int       `json:"-"` // Track turns in current round, not sent to client
 	sync.Mutex
 }
 
@@ -188,11 +189,18 @@ func (g *game) FinishRound() {
 		player := g.Dequeue()
 		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
 
-		// Check if this was the last player in the queue (cycle complete)
-		// If queue length is 0 after dequeue, or this player is about to become last in queue
-		wasLastPlayer := len(g.GameState.PlayerQueue) == 0
-
 		g.Enqueue(player)
+
+		// Increment turn counter
+		g.GameState.Lock()
+		g.GameState.TurnCount++
+		totalPlayers := len(g.players)
+		// A round completes when everyone has had exactly one turn
+		wasLastPlayer := g.GameState.TurnCount >= totalPlayers
+		if wasLastPlayer {
+			g.GameState.TurnCount = 0 // Reset for next round
+		}
+		g.GameState.Unlock()
 
 		var roundOverResponse RoundOverResponse
 		roundOverResponse.TopWords = g.WordList.TopWords(g.GameState.Atama, g.GameState.Oshiri)
