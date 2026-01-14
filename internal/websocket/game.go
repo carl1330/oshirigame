@@ -65,7 +65,7 @@ func NewGame() *game {
 func NewGameState() *GameState {
 	return &GameState{
 		Started:          false,
-		Round:            0,
+		Round:            1,
 		MaxRounds:        10,
 		Time:             0,
 		RoundTime:        25,
@@ -201,11 +201,6 @@ func (g *game) FinishRound() {
 
 		g.SetRoundOver(true)
 
-		// Only increment round when we've completed a full cycle (back to the first player)
-		if wasLastPlayer {
-			g.IncrementRound()
-		}
-
 		roundOverResponse.GameState = g.MarsalGameState()
 
 		data, _ := json.Marshal(roundOverResponse)
@@ -218,9 +213,13 @@ func (g *game) FinishRound() {
 
 		g.SetGameRunning(false)
 
-		// Check if game is over (max rounds reached)
-		if g.IsGameOver() {
+		// Check if game is over (max rounds reached) before incrementing for next round
+		// If this was the last player and we've reached max rounds, end the game
+		if wasLastPlayer && g.IsGameOver() {
 			g.EndGame()
+		} else if wasLastPlayer {
+			// Only increment round when we've completed a full cycle (back to the first player)
+			g.IncrementRound()
 		}
 
 	}
