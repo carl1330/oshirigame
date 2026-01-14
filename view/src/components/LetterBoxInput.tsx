@@ -42,7 +42,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     props.setText(newValue);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = () => {
     setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
   };
 
