@@ -10,7 +10,6 @@ interface LetterBoxProps {
   setText: (text: string) => void;
   disabled: boolean;
   focus: boolean;
-  shouldFocus: boolean; // New prop to control when to show keyboard
 }
 
 export default function LetterBoxInput(props: LetterBoxProps) {
@@ -42,23 +41,17 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     props.setText(newValue);
   };
 
-  const handleKeyPress = () => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
   };
 
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (props.shouldFocus && !props.disabled && ref.current) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        ref.current?.focus();
-      }, 100);
-    } else if (!props.shouldFocus && ref.current) {
-      // Blur the input to hide keyboard
-      ref.current.blur();
+    if (!props.disabled && ref.current) {
+      ref.current.focus();
     }
-  }, [props.shouldFocus, props.disabled]);
+  }, [props.disabled]);
 
   const handleBoxClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -89,6 +82,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
         autoComplete="off"
         autoCorrect="off"
         spellCheck="false"
+        autoFocus={!props.disabled}
       />
       {props.text.length > 0 ? (
         props.text.split("").map((letter, index) => (

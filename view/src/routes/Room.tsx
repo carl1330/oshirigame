@@ -170,8 +170,6 @@ export default function Room() {
       case EventRoundStart: {
         const gameState = event.data as GameState;
         setGameState(gameState);
-        setAtamaActive(true);
-        setOshiriActive(true);
         break;
       }
       case EventNextRound:
@@ -300,7 +298,6 @@ export default function Room() {
     if (gameId) {
       setPlayerInput("");
       setAtamaActive(true);
-      setOshiriActive(true);
       setRoundOver(false);
       sendEvent(EventNextRound, null);
     }
@@ -341,7 +338,6 @@ return (
                     text={playerInput}
                     setText={setPlayerInput}
                     disabled={gameState.roundOver}
-                    shouldFocus={player.isLeader && !roundOver && !atamaActive && !oshiriActive}
                   />
                   <LetterRandomizer letter={oshiri} active={oshiriActive} />
                 </>
