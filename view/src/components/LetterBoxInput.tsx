@@ -13,7 +13,6 @@ interface LetterBoxProps {
 }
 
 export default function LetterBoxInput(props: LetterBoxProps) {
-  const [inputWidth, setInputWidth] = useState(64);
   const [playbackRate, setPlaybackRate] = useState(0.75);
   const [inputSound] = useSound(clickSound, {
     playbackRate,
@@ -25,7 +24,6 @@ export default function LetterBoxInput(props: LetterBoxProps) {
   });
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     props.setText(e.target.value.toUpperCase());
-    setInputWidth(e.target.value.length * 64);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -44,7 +42,7 @@ export default function LetterBoxInput(props: LetterBoxProps) {
   }, [props.disabled]);
 
   return (
-    <div className={`relative ${props.text.length === 0 && "w-16"}`}>
+    <>
       <input
         maxLength={45}
         ref={ref}
@@ -54,31 +52,32 @@ export default function LetterBoxInput(props: LetterBoxProps) {
         value={props.text}
         onChange={handleChange}
         onKeyDown={handleKeyPress}
-        className="w-full border border-gray-300 rounded-md px-4 py-2 outline-none"
+        className="absolute opacity-0 pointer-events-auto w-0 h-0"
         placeholder="Type here..."
         style={{
-          width: inputWidth + "px",
-          opacity: 0,
           textTransform: "uppercase",
         }}
         disabled={props.disabled}
+        inputMode="text"
+        autoCapitalize="characters"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
       />
-      <div className="absolute top-0 left-0 h-full w-full flex justify-start items-center pointer-events-none z-0 gap-2">
-        {props.text.length > 0 ? (
-          props.text.split("").map((letter, index) => (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 0.3 }}
-              key={index}
-              className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center"
-            >
-              {letter}
-            </motion.div>
-          ))
-        ) : (
-          <div className="text-center text-5xl text-white w-16 h-16 border rounded-md border-white flex justify-center items-center" />
-        )}
-      </div>
-    </div>
+      {props.text.length > 0 ? (
+        props.text.split("").map((letter, index) => (
+          <motion.div
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 0.3 }}
+            key={index}
+            className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center flex-shrink-0"
+          >
+            {letter}
+          </motion.div>
+        ))
+      ) : (
+        <div className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center" />
+      )}
+    </>
   );
 }

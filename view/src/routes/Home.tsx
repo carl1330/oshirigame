@@ -31,16 +31,16 @@ export default function Home() {
     <div className="w-full h-screen flex p-2">
       <div className="flex w-full flex-col gap-2">
         <div className="flex grow justify-center">
-          <div className="flex flex-col gap-4 justify-center items-center h-full w-full rounded-xl bg-[#212121]">
-            <h1 className="text-white text-3xl font-bold">Oshirigame</h1>
+          <div className="flex flex-col gap-4 justify-center items-center h-full w-full rounded-xl bg-[#212121] px-4 py-6">
+            <h1 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold text-center">Oshirigame</h1>
             <Button
-              className="flex w-14 h-14 items-center justify-center"
+              className="flex w-16 h-16 sm:w-14 sm:h-14 items-center justify-center"
               onClick={handleCreateRoom}
             >
               {loading ? (
                 <Oval color="#ffffff" width={25} height={25} />
               ) : (
-                <FaPlay />
+                <FaPlay className="text-lg sm:text-base" />
               )}
             </Button>
           </div>

@@ -6,15 +6,22 @@ export const devConfig = {
 };
 
 export const prodConfig = {
-  httpProtocol: "https",
-  host: import.meta.env.VITE_BACKEND_URL,
+  httpProtocol: "http",
+  host: import.meta.env.VITE_BACKEND_URL || "localhost",
   port: 8080,
-  wsProtocol: "wss",
+  wsProtocol: "ws",
 };
 
 export const getWsConfig = () => {
   if (process.env.NODE_ENV === "production") {
-    return prodConfig.wsProtocol + "://" + prodConfig.host + "/ws";
+    return (
+      prodConfig.wsProtocol +
+      "://" +
+      prodConfig.host +
+      ":" +
+      prodConfig.port +
+      "/ws"
+    );
   } else {
     return (
       devConfig.wsProtocol +
@@ -29,7 +36,9 @@ export const getWsConfig = () => {
 
 export const getHttpConfig = () => {
   if (process.env.NODE_ENV === "production") {
-    return prodConfig.httpProtocol + "://" + prodConfig.host;
+    return (
+      prodConfig.httpProtocol + "://" + prodConfig.host + ":" + prodConfig.port
+    );
   } else {
     return (
       devConfig.httpProtocol + "://" + devConfig.host + ":" + devConfig.port

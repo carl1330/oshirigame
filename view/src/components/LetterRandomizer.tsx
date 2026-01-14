@@ -22,14 +22,14 @@ export default function LetterRandomizer(props: LetterRandomizerProps) {
 
   if (props.active) {
     return (
-      <div className="flex justify-center items-center rounded-md text-white font-bold text-5xl w-16 h-16 border-white border">
+      <div className="flex justify-center items-center rounded-md text-white font-bold text-3xl sm:text-5xl w-12 h-12 sm:w-16 sm:h-16 border-white border">
         {letter.toUpperCase()}
       </div>
     );
   }
 
   return (
-    <div className="flex justify-center items-center rounded-md text-white font-bold text-5xl w-16 h-16 border-white border">
+    <div className="flex justify-center items-center rounded-md text-white font-bold text-3xl sm:text-5xl w-12 h-12 sm:w-16 sm:h-16 border-white border">
       {props.letter.toUpperCase()}
     </div>
   );

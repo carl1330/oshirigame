@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/carl1330/oshirigame/internal/websocket"
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,17 @@ func main() {
 
 	go hub.Run()
 
+	// Serve static files
+	staticDir := "./static"
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		// Fallback to view/dist for local development
+		staticDir = "./view/dist"
+	}
+
+	// Serve static files with proper file server
+	r.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(staticDir))))
+
+	// API routes
 	r.Get("/creategame", handler.CreateGame)
 	r.Get("/ws", handler.ServeWS)
 

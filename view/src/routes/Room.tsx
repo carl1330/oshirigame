@@ -258,15 +258,15 @@ export default function Room() {
       <div className="w-full h-screen flex p-2">
         <div className="flex w-full flex-col gap-2">
           <div className="flex grow justify-center">
-            <div className="flex flex-col gap-2 justify-center items-center h-full w-full rounded-xl bg-[#212121]">
-              <h1 className="text-white text-3xl font-bold">Join room</h1>
-              <form className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 justify-center items-center h-full w-full rounded-xl bg-[#212121] px-4 py-6">
+              <h1 className="text-white text-2xl sm:text-3xl font-bold text-center">Join room</h1>
+              <form className="flex flex-col gap-4 w-full max-w-xs">
                 <input
-                  className="text-white bg-[#3F3F3F] px-6 py-4 rounded-full text-center"
+                  className="text-white bg-[#3F3F3F] px-4 py-3 sm:px-6 sm:py-4 rounded-full text-center text-base sm:text-lg w-full"
                   placeholder="Enter your username"
                   onChange={(e) => setInputUsername(e.target.value)}
                 ></input>
-                <Button onClick={handleJoinRoom}>Join room</Button>
+                <Button onClick={handleJoinRoom} className="w-full py-3">Join room</Button>
               </form>
             </div>
           </div>
@@ -281,9 +281,9 @@ export default function Room() {
       <div className="flex flex-col h-screen p-2 gap-2">
         <div className="flex grow w-full gap-2">
           <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
-            <h1 className="text-white text-3xl font-bold">Loading..</h1>
+            <h1 className="text-white text-2xl sm:text-3xl font-bold text-center">Loading..</h1>
           </div>
-          <div className="flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl"></div>
+          <div className="hidden sm:flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl"></div>
         </div>
         <Footer />
       </div>
@@ -303,27 +303,27 @@ export default function Room() {
     }
   }
 
-  return (
+return (
     <div className="flex flex-col h-screen p-2 gap-2">
       <div className="flex grow w-full gap-2">
         {gameState.started ? (
-          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
-            <h1 className="text-white text-3xl font-bold">
+          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-2 py-4">
+            <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
               Round: {gameState.round}
             </h1>
-            <h1 className="text-white text-3xl font-bold">
+            <h1 className="text-white text-lg sm:text-xl md:text-3xl font-bold text-center">
               {roundOver ? (
                 "Round Over"
               ) : (
-                <div className="flex flex-col justify-center items-center gap-4">
-                  <p className="text-4xl">
+                <div className="flex flex-col justify-center items-center gap-2 sm:gap-4">
+                  <p className="text-lg sm:text-2xl md:text-4xl text-center">
                     {gameState.playerQueue[0].username}'s turn!
                   </p>
-                  <p>Time left: {gameState.time}</p>
+                  <p className="text-sm sm:text-base">Time left: {gameState.time}</p>
                 </div>
               )}
             </h1>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-0 justify-center w-full max-w-full px-2">
               {player.isLeader && !roundOver && (
                 <>
                   <LetterRandomizer
@@ -362,34 +362,50 @@ export default function Room() {
                 />
               )}
             </div>
-            <div className="flex gap-2 text-white">
-              {roundOver && "top words: "}
+            <div className="flex gap-1 sm:gap-2 text-white flex-wrap justify-center max-w-full">
+              {roundOver && <span className="w-full text-center text-sm sm:text-base">top words:</span>}
               {roundOver &&
                 topWords.map((value, key) => (
-                  <p key={key} className="text-white">
+                  <p key={key} className="text-white text-xs sm:text-sm px-1">
                     {value}
                   </p>
                 ))}
             </div>
             {roundOver && player.isLeader ? (
-              <Button onClick={handleStartRound}>Next round</Button>
+              <Button onClick={handleStartRound} className="w-full max-w-xs py-3">Next round</Button>
             ) : (
-              <p className="text-white">
+              <p className="text-white text-center text-xs sm:text-sm px-4">
                 {roundOver &&
                   "Waiting for " +
                     gameState.playerQueue[0].username +
                     " to start next round"}
               </p>
             )}
+            
+            {/* Mobile players list */}
+            <div className="sm:hidden flex flex-col gap-2 w-full">
+              <h3 className="text-white text-sm font-semibold text-center">Players</h3>
+              <div className="flex flex-col gap-1">
+                {gameState.playerQueue.map((value, key) => (
+                  <PlayerCard
+                    key={key}
+                    username={value.username}
+                    score={value.score}
+                    isLeader={value.isLeader}
+                    isCurrentPlayer={true}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4">
-            <h1 className="text-white text-3xl font-bold">Room: {gameId}</h1>
+          <div className="flex grow flex-col justify-center items-center bg-[#212121] rounded-xl gap-4 px-4 py-6">
+            <h1 className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">Room: {gameId}</h1>
             {player.isLeader ? (
               <>
-                <div className="flex flex-col items-center gap-2">
-                  <Button onClick={handleStartGame}>Start Game</Button>
-                  <Button onClick={() => setGamePropsOpen(true)}>
+                <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                  <Button onClick={handleStartGame} className="w-full py-3">Start Game</Button>
+                  <Button onClick={() => setGamePropsOpen(true)} className="w-full py-3">
                     <FaCog className="text-white" />
                   </Button>
                   <GameOptionsDialog
@@ -403,14 +419,14 @@ export default function Room() {
                 </div>
               </>
             ) : (
-              <p className="text-white">
+              <p className="text-white text-center text-sm sm:text-base px-4">
                 Waiting for {gameState.playerQueue[0].username} to start the
                 game
               </p>
             )}
           </div>
         )}
-        <div className="flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl">
+        <div className="hidden sm:flex flex-col gap-2 h-full justify-center items-center bg-[#161616] rounded-xl px-2">
           {gameState.playerQueue.map((value, key) => (
             <PlayerCard
               key={key}
