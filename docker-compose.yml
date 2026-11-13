@@ -1,0 +1,8 @@
+services:
+  oshirigame:
+    build: .
+    image: oshirigame
+    container_name: oshirigame
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,9 @@ type GameState struct {
 	Time             int       `json:"time"`
 	RoundTime        int       `json:"roundTime"`
 	WordCombinations int       `json:"wordCombinations"`
+	Language         string    `json:"language"`
+	BannedAtama      string    `json:"bannedAtama"`
+	BannedOshiri     string    `json:"bannedOshiri"`
 	PlayerQueue      []*Player `json:"playerQueue"`
 	Input            string    `json:"input"`
 	Atama            string    `json:"atama"`
@@ -74,6 +78,9 @@ func NewGameState() *GameState {
 		Time:             0,
 		RoundTime:        25,
 		WordCombinations: 400,
+		Language:         string(oshirigame.English),
+		BannedAtama:      "",
+		BannedOshiri:     "",
 		PlayerQueue:      make([]*Player, 0),
 	}
 }
@@ -145,8 +152,9 @@ func (g *game) GetStarted() bool {
 
 func (g *game) InitializeGame() {
 	g.SetGameStarted(true)
-	g.SetAtama(RandomLetter())
-	g.SetOshiri(RandomLetter())
+	alphabet, bannedAtama, bannedOshiri := g.GetLetterConfig()
+	g.SetAtama(RandomLetter(alphabet, bannedAtama))
+	g.SetOshiri(RandomLetter(alphabet, bannedOshiri))
 	g.SetGameStateTime(g.GameState.RoundTime)
 	g.SetGameStateInput("")
 	g.SetRoundOver(false)
@@ -171,10 +179,12 @@ func (g *game) StartRound() {
 	g.SetGameStateInput("")
 
 	//Generate random letters and check if that combination of letters has more than 400 possible words
-	//If not try again until successful
-	for {
-		g.SetAtama(RandomLetter())
-		g.SetOshiri(RandomLetter())
+	//If not try again until successful. Capped attempts: banned letters can make the
+	//threshold unreachable, in which case we keep the last picked combination.
+	alphabet, bannedAtama, bannedOshiri := g.GetLetterConfig()
+	for attempts := 0; attempts < 500; attempts++ {
+		g.SetAtama(RandomLetter(alphabet, bannedAtama))
+		g.SetOshiri(RandomLetter(alphabet, bannedOshiri))
 		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) >= g.GameState.WordCombinations {
 			break
 		}
@@ -310,9 +320,61 @@ func (g *game) SendPlayerState(player *Player) {
 	player.client.send <- message
 }
 
-func RandomLetter() string {
-	var letters = []rune("abcdefghijklmnopqrstuvwxyz")
-	return string(letters[rand.Intn(len(letters))])
+func RandomLetter(alphabet string, banned string) string {
+	allowed := make([]rune, 0, len(alphabet))
+	for _, letter := range alphabet {
+		if !strings.ContainsRune(banned, letter) {
+			allowed = append(allowed, letter)
+		}
+	}
+	// Fall back to the full alphabet if everything is banned
+	if len(allowed) == 0 {
+		allowed = []rune(alphabet)
+	}
+	return string(allowed[rand.Intn(len(allowed))])
+}
+
+// SanitizeBannedLetters keeps only unique letters from the alphabet, lowercased,
+// capped at one less than the alphabet size so a letter always remains available.
+func SanitizeBannedLetters(input string, alphabet string) string {
+	max := len([]rune(alphabet)) - 1
+	seen := make(map[rune]bool)
+	result := make([]rune, 0, max)
+	for _, r := range strings.ToLower(input) {
+		if strings.ContainsRune(alphabet, r) && !seen[r] && len(result) < max {
+			seen[r] = true
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+func (g *game) GetLetterConfig() (alphabet string, bannedAtama string, bannedOshiri string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	alphabet = oshirigame.Alphabet(oshirigame.Language(g.GameState.Language))
+	return alphabet, g.GameState.BannedAtama, g.GameState.BannedOshiri
+}
+
+func (g *game) SetBannedLetters(bannedAtama string, bannedOshiri string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	alphabet := oshirigame.Alphabet(oshirigame.Language(g.GameState.Language))
+	g.GameState.BannedAtama = SanitizeBannedLetters(bannedAtama, alphabet)
+	g.GameState.BannedOshiri = SanitizeBannedLetters(bannedOshiri, alphabet)
+}
+
+// SetLanguage switches the word list; ignores unknown languages.
+func (g *game) SetLanguage(language string) {
+	if !oshirigame.IsValidLanguage(language) {
+		return
+	}
+	g.Lock()
+	g.WordList = oshirigame.GetWordList(oshirigame.Language(language))
+	g.Unlock()
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Language = language
 }
 
 func (g *game) IsRunning() bool {

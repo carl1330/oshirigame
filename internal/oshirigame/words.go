@@ -5,25 +5,76 @@ import (
 	"embed"
 	"fmt"
 	"strings"
+	"sync"
 )
 
-//go:embed wordlists/words_alpha.txt
-var englishWords embed.FS
+//go:embed wordlists/words_alpha.txt wordlists/words_swedish.txt
+var wordFiles embed.FS
+
+type Language string
+
+const (
+	English Language = "english"
+	Swedish Language = "swedish"
+)
+
+var languageFiles = map[Language]string{
+	English: "wordlists/words_alpha.txt",
+	Swedish: "wordlists/words_swedish.txt",
+}
+
+var alphabets = map[Language]string{
+	English: "abcdefghijklmnopqrstuvwxyz",
+	Swedish: "abcdefghijklmnopqrstuvwxyzåäö",
+}
+
+var (
+	wordListCache   = make(map[Language]*WordList)
+	wordListCacheMu sync.Mutex
+)
 
 type WordList struct {
 	Words map[string]bool
 }
 
-func NewWordList() *WordList {
+func IsValidLanguage(language string) bool {
+	_, ok := languageFiles[Language(language)]
+	return ok
+}
+
+func Alphabet(language Language) string {
+	if alphabet, ok := alphabets[language]; ok {
+		return alphabet
+	}
+	return alphabets[English]
+}
+
+// GetWordList returns the shared word list for a language, loading it once.
+func GetWordList(language Language) *WordList {
+	wordListCacheMu.Lock()
+	defer wordListCacheMu.Unlock()
+	if wl, ok := wordListCache[language]; ok {
+		return wl
+	}
 	wl := &WordList{
 		Words: make(map[string]bool),
 	}
-	FillWordList(wl)
+	FillWordList(wl, language)
+	wordListCache[language] = wl
 	return wl
 }
 
-func FillWordList(wl *WordList) {
-	file, err := englishWords.Open("wordlists/words_alpha.txt")
+func NewWordList() *WordList {
+	return GetWordList(English)
+}
+
+func FillWordList(wl *WordList, language Language) {
+	filename, ok := languageFiles[language]
+	if !ok {
+		filename = languageFiles[English]
+	}
+
+	file, err := wordFiles.Open(filename)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -49,7 +100,7 @@ func FillWordList(wl *WordList) {
 
 func (wl *WordList) GetScore(word string) int {
 	if wl.Words[word] {
-		return len(word) - 2
+		return len([]rune(word)) - 2
 	}
 	return 0
 }

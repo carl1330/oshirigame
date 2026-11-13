@@ -29,6 +29,9 @@ export type GameState = {
   maxRounds: number;
   wordCombinations: number;
   roundTime: number;
+  language: string;
+  bannedAtama: string;
+  bannedOshiri: string;
   playerQueue: Player[];
   input: string;
   atama: string;
@@ -71,6 +74,9 @@ export interface GameOptionsEvent {
   maxRounds: number;
   minWordCombinations: number;
   roundTime: number;
+  language: string;
+  bannedAtama: string;
+  bannedOshiri: string;
 }
 
 interface RoundOverResponse {
@@ -504,6 +510,9 @@ export default function Room() {
                     currentMaxRounds={gameState.maxRounds}
                     currentRoundTime={gameState.roundTime}
                     currentMinWordCombos={gameState.wordCombinations}
+                    currentLanguage={gameState.language}
+                    currentBannedAtama={gameState.bannedAtama}
+                    currentBannedOshiri={gameState.bannedOshiri}
                     isOpen={gamePropsOpen}
                     setIsOpen={setGamePropsOpen}
                     sendEvent={sendEvent}

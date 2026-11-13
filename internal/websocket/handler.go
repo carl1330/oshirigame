@@ -64,6 +64,9 @@ type GameOptionsUpdateMessage struct {
 	MaxRounds           int
 	RoundTime           int
 	MinWordCombinations int
+	Language            string
+	BannedAtama         string
+	BannedOshiri        string
 }
 
 type RoundOverResponse struct {
@@ -310,6 +313,9 @@ func (h *hub) UpdateGameOptions(m *Message, c *client) error {
 	game.SetMaxRounds(gameOptionsUpdateMessage.MaxRounds)
 	game.SetWordCombinations(gameOptionsUpdateMessage.MinWordCombinations)
 	game.SetRoundTime(gameOptionsUpdateMessage.RoundTime)
+	// Language first so banned letters are sanitized against the right alphabet
+	game.SetLanguage(gameOptionsUpdateMessage.Language)
+	game.SetBannedLetters(gameOptionsUpdateMessage.BannedAtama, gameOptionsUpdateMessage.BannedOshiri)
 
 	game.BroadcastGameState()
 
