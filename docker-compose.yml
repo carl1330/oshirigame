@@ -5,4 +5,12 @@ services:
     container_name: oshirigame
     ports:
       - "8080:8080"
+    environment:
+      # Daily-mode leaderboard lives in an embedded sqlite database on this volume
+      - DB_PATH=/data/oshirigame.db
+    volumes:
+      - oshirigame-data:/data
     restart: unless-stopped
+
+volumes:
+  oshirigame-data:

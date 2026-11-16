@@ -3,7 +3,7 @@ import "react-toastify/dist/ReactToastify.css";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";
 import { getHttpConfig } from "../misc/server.conf";
-import { FaPlay, FaSignInAlt } from "react-icons/fa";
+import { FaCalendarDay, FaPlay, FaSignInAlt } from "react-icons/fa";
 import { useState } from "react";
 import { Oval } from "react-loader-spinner";
 import { motion } from "framer-motion";
@@ -97,6 +97,14 @@ export default function Home() {
                   <span className="text-lg">Create room</span>
                 </>
               )}
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex items-center justify-center gap-3 px-8"
+              onClick={() => navigate("/daily")}
+            >
+              <FaCalendarDay aria-hidden />
+              <span className="text-lg">Daily challenge</span>
             </Button>
 
             {/* Join an existing room by code or pasted invite link */}

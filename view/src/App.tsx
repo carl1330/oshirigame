@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./routes/Home";
 import Room from "./routes/Room";
+import Daily from "./routes/Daily";
 import { ToastContainer } from "react-toastify";
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/room/:gameId" element={<Room />} />
+        <Route path="/daily" element={<Daily />} />
       </Routes>
       <ToastContainer
         position="top-center"

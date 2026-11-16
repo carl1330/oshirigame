@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Oshirigame
 # Stage 1: Build Go backend
-FROM golang:1.22-alpine AS backend-builder
+FROM golang:1.26-alpine AS backend-builder
 
 WORKDIR /app
 

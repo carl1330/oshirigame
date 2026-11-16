@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/carl1330/oshirigame/internal/daily"
 	"github.com/carl1330/oshirigame/internal/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -29,9 +30,25 @@ func main() {
 
 	go hub.Run()
 
+	// Daily challenge: sqlite-backed leaderboard
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./data/oshirigame.db"
+	}
+	store, err := daily.NewStore(dbPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open database:", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+	dailyHandler := daily.NewHandler(store)
+
 	// API routes (must be before static file handler)
 	r.Get("/creategame", handler.CreateGame)
 	r.Get("/ws", handler.ServeWS)
+	r.Get("/daily", dailyHandler.GetChallenge)
+	r.Post("/daily/submit", dailyHandler.Submit)
+	r.Get("/daily/leaderboard", dailyHandler.Leaderboard)
 
 	// Serve static files
 	staticDir := "./static"
