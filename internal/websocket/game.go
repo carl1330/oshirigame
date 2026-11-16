@@ -85,9 +85,22 @@ type Player struct {
 	Eliminated bool   `json:"eliminated"` // battle royale: out of the game
 	roundInput string // this player's word in longest-word mode
 	submitted  bool   // locked in their word this round (longest-word mode)
+	lastChatAt time.Time
 	stats      playerStats
 	client     *client
 	sync.Mutex
+}
+
+// AllowChat enforces the per-player chat cooldown; a true result claims the
+// slot, so call it only when the message is otherwise valid.
+func (p *Player) AllowChat(now time.Time, minInterval time.Duration) bool {
+	p.Lock()
+	defer p.Unlock()
+	if now.Sub(p.lastChatAt) < minInterval {
+		return false
+	}
+	p.lastChatAt = now
+	return true
 }
 
 // playerStats accumulates per-game material for the end-of-game awards.
@@ -318,7 +331,7 @@ func (g *game) StartRound() {
 			return // Round cancelled
 		}
 	} else {
-		// Letters unchanged — stop the client scrollers right away and give
+		// Letters unchanged, stop the client scrollers right away and give
 		// them just enough time to settle before the clock starts.
 		atama, oshiri := g.GetRoundLetters()
 		g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+atama+`"}`))
@@ -338,7 +351,7 @@ func (g *game) StartRound() {
 	g.BroadcastMessage(ROUND_START, data)
 
 	// Ticks buffered during the letter reveal would instantly eat the first
-	// countdown second — restart the ticker now that the round is live.
+	// countdown second, restart the ticker now that the round is live.
 	roundTicker.Reset(1 * time.Second)
 
 	// Round timer with cancellation support
@@ -512,7 +525,7 @@ func (g *game) FinishRoyaleRound() {
 		}
 	} else {
 		player.LoseLife()
-		// A miss breaks the chain — the next player starts fresh
+		// A miss breaks the chain, the next player starts fresh
 		g.SetRequiredLength(0)
 		eliminated = player.GetLives() <= 0
 	}
@@ -545,7 +558,7 @@ func (g *game) FinishRoyaleRound() {
 	gameEnding := alive == 0 || (alive == 1 && eliminatedCount > 0)
 
 	var roundOverResponse RoundOverResponse
-	// The same letters stay in play for several turns — only reveal the best
+	// The same letters stay in play for several turns, only reveal the best
 	// words once this combination is spent (or the game is ending). Always a
 	// real slice: a nil one marshals to JSON null and breaks clients reading
 	// topWords.length.
@@ -582,7 +595,7 @@ func (g *game) FinishRoyaleRound() {
 }
 
 // scheduleAutoAdvance starts the next battle royale turn after the result has
-// been on screen for a while — no host interaction needed. The round counter
+// been on screen for a while, no host interaction needed. The round counter
 // is captured so a reset (or anything else that moved the game on) cancels
 // the pending advance.
 func (g *game) scheduleAutoAdvance(delay time.Duration) {
@@ -635,7 +648,7 @@ var royaleKnockoutPhrases = []string{
 
 // EndRoyaleGame ranks players by survival: the last one standing first, then
 // the eliminated players in reverse elimination order. Each ranking carries a
-// pre-formatted survival stat — battle royale isn't about points.
+// pre-formatted survival stat, battle royale isn't about points.
 func (g *game) EndRoyaleGame() {
 	g.GameState.Lock()
 	startingLives := g.GameState.Lives
@@ -887,7 +900,7 @@ func (g *game) Run() {
 			go g.BroadcastGameState()
 			go g.SendPlayerState(player)
 		case c := <-g.unregister:
-			// Don't drop the player immediately — give them a grace period
+			// Don't drop the player immediately, give them a grace period
 			// to reconnect (flaky mobile connections, page reloads).
 			if player, ok := g.players[c.token]; ok && player.GetClient() == c {
 				go func() {
@@ -1250,7 +1263,7 @@ func (g *game) ResetToLobby() {
 	g.GameState.RequiredLength = 0
 	g.GameState.SwapIn = 0
 	g.GameState.EliminatedPlayers = make([]*Player, 0)
-	// Snapshot who still holds a seat — eliminated battle royale players
+	// Snapshot who still holds a seat, eliminated battle royale players
 	// were removed from the queue and must get their seat back
 	queued := make(map[string]bool, len(g.GameState.PlayerQueue))
 	for _, player := range g.GameState.PlayerQueue {

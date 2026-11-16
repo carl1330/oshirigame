@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import PlayerAvatar from "./PlayerAvatar";
+import ChatBubble from "./ChatBubble";
 import { MORPH } from "../misc/motion";
+import { Bubble } from "../hooks/useChatBubbles";
 
 export interface StagePlayer {
   username: string;
@@ -13,6 +15,8 @@ interface PlayerStageProps {
   /** Tapping an empty seat copies the invite link */
   onInvite: () => void;
   copied: boolean;
+  /** Live chat bubbles, keyed by username */
+  bubbles?: Record<string, Bubble>;
 }
 
 const ROOM_SOFT_CAP = 8;
@@ -42,7 +46,7 @@ export default function PlayerStage(props: PlayerStageProps) {
             initial={{ scale: 0.4, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.4, opacity: 0 }}
-            className="flex flex-col items-center gap-1.5 w-20 sm:w-24"
+            className="relative flex flex-col items-center gap-1.5 w-20 sm:w-24"
           >
             <div className="relative">
               <div className="rounded-full p-1 bg-surface-sunken border border-white/10">
@@ -57,6 +61,14 @@ export default function PlayerStage(props: PlayerStageProps) {
             <span className="text-white font-display font-semibold text-xs sm:text-sm truncate w-full text-center">
               {p.username}
             </span>
+            <AnimatePresence>
+              {props.bubbles?.[p.username] && (
+                <ChatBubble
+                  key={props.bubbles[p.username].key}
+                  text={props.bubbles[p.username].text}
+                />
+              )}
+            </AnimatePresence>
           </motion.div>
         ))}
         {Array.from({ length: emptySeats }).map((_, i) => (

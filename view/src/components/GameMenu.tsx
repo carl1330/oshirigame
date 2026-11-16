@@ -51,7 +51,7 @@ function PauseOption(props: PauseOptionProps) {
 }
 
 export default function GameMenu(props: GameMenuProps) {
-  // Leave Room is destructive — ask for confirmation inside the takeover
+  // Leave Room is destructive, ask for confirmation inside the takeover
   const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   // Always reopen on the main menu, not a stale confirm step
@@ -110,7 +110,7 @@ export default function GameMenu(props: GameMenuProps) {
         {confirmingLeave ? (
           <>
             <Dialog.Title className="font-display font-bold text-xs sm:text-sm tracking-[0.3em] uppercase text-violet-300 mb-4">
-              — Leave room? —
+              Leave room?
             </Dialog.Title>
             <p className="text-white/60 text-base sm:text-lg mb-6 max-w-sm">
               You'll be returned to the main menu.
@@ -134,7 +134,7 @@ export default function GameMenu(props: GameMenuProps) {
         ) : (
           <>
             <Dialog.Title className="font-display font-bold text-xs sm:text-sm tracking-[0.3em] uppercase text-violet-300 mb-6">
-              {props.gameStarted ? "— Paused —" : "— Menu —"}
+              {props.gameStarted ? "Paused" : "Menu"}
             </Dialog.Title>
             <div className="flex flex-col items-start gap-1">
               <PauseOption

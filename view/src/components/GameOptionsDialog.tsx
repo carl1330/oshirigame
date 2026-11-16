@@ -1,7 +1,13 @@
 import { Dialog } from "@headlessui/react";
 import Button from "./Button";
 import React, { useEffect, useState } from "react";
-import { FaMinus, FaPlus } from "react-icons/fa";
+import {
+  FaCrown,
+  FaMinus,
+  FaPlus,
+  FaRulerHorizontal,
+  FaSyncAlt,
+} from "react-icons/fa";
 import {
   EventUpdateGameOptions,
   GameOptionsEvent,
@@ -86,26 +92,29 @@ function Stepper(props: StepperProps) {
 }
 
 const languages = [
-  { value: "english", label: "English" },
-  { value: "swedish", label: "Svenska" },
+  { value: "english", label: "English", flag: "🇬🇧" },
+  { value: "swedish", label: "Svenska", flag: "🇸🇪" },
 ];
 
 const gameModes = [
   {
     value: "classic",
     label: "Classic",
+    icon: FaSyncAlt,
     description: "Take turns finding a word between the letters",
   },
   {
     value: "longest",
     label: "Longest word",
-    description: "Everyone writes at once — the longest valid word scores",
+    icon: FaRulerHorizontal,
+    description: "Everyone writes at once. The longest valid word scores",
   },
   {
     value: "royale",
     label: "Battle royale",
+    icon: FaCrown,
     description:
-      "Each word must beat the last one's length — fail and lose a life. Last one standing wins!",
+      "Each word must beat the last one's length. Fail and you lose a life. Last one standing wins!",
   },
 ];
 
@@ -166,193 +175,213 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
   return (
     <Dialog open={props.isOpen} onClose={() => props.setIsOpen(false)}>
       <div className="dialog-backdrop" aria-hidden="true" />
-      <div className="fixed inset-0 flex w-screen items-center justify-center p-2 sm:p-4 overflow-y-auto">
-        <Dialog.Panel className="dialog-panel my-auto">
+      <div className="fixed inset-0 z-50 flex w-screen items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <Dialog.Panel className="dialog-panel dialog-panel-wide my-auto">
           <Dialog.Title className="dialog-title mb-5">
             Game Options
           </Dialog.Title>
           <div className="space-y-5">
-            <div>
+            <div role="radiogroup" aria-label="Game mode">
               <span className="field-label">Game mode</span>
-              <div className="flex flex-col gap-2">
-                {gameModes.map((mode) => (
-                  <button
-                    key={mode.value}
-                    type="button"
-                    onClick={() => setGameMode(mode.value)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
-                      gameMode === mode.value
-                        ? "bg-violet-500/15 border-violet-400/60"
-                        : "bg-surface-sunken border-white/10 hover:border-white/25"
-                    }`}
-                  >
-                    {/* Mini letter tile — lights purple like an anchor when selected */}
-                    <span
-                      className={`tile w-8 h-8 text-base rounded-md flex-shrink-0 ${
-                        gameMode === mode.value ? "tile-anchor" : ""
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {gameModes.map((mode) => {
+                  const selected = gameMode === mode.value;
+                  const Icon = mode.icon;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setGameMode(mode.value)}
+                      className={`flex sm:flex-col items-center sm:items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
+                        selected
+                          ? "bg-violet-500/15 border-violet-400/60"
+                          : "bg-surface-sunken border-white/10 hover:border-white/25"
                       }`}
-                      aria-hidden
                     >
-                      {mode.label[0]}
-                    </span>
-                    <span className="flex flex-col items-start">
-                      <span className="text-sm font-semibold text-white/90 font-display">
-                        {mode.label}
+                      {/* Mode icon on a keycap tile, lights purple like an
+                          anchor when selected */}
+                      <span
+                        className={`tile w-10 h-10 sm:w-10 sm:h-10 text-base sm:text-base rounded-lg flex-shrink-0 ${
+                          selected ? "tile-anchor" : ""
+                        }`}
+                        aria-hidden
+                      >
+                        <Icon className="text-base" />
                       </span>
-                      <span className="text-sm text-white/60">
-                        {mode.description}
+                      <span className="flex flex-col items-start">
+                        <span className="text-sm font-semibold text-white/90 font-display">
+                          {mode.label}
+                        </span>
+                        <span className="text-sm text-white/60">
+                          {mode.description}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {/* Battle royale has no fixed round count — it ends when one
-                player is left standing */}
-            {gameMode !== "royale" && (
-              <Stepper
-                label="Rounds"
-                value={maxRounds}
-                min={1}
-                max={10}
-                onChange={setMaxRounds}
-              />
-            )}
-            {gameMode === "royale" && (
-              <>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+              {/* Battle royale has no fixed round count, it ends when one
+                  player is left standing */}
+              {gameMode !== "royale" && (
                 <Stepper
-                  label="Lives"
-                  value={lives}
+                  label="Rounds"
+                  value={maxRounds}
                   min={1}
-                  max={5}
-                  onChange={setLives}
-                />
-                <Stepper
-                  label="New letters every"
-                  value={swapTurns}
-                  min={2}
                   max={10}
-                  suffix="turns"
-                  onChange={setSwapTurns}
+                  onChange={setMaxRounds}
                 />
-              </>
-            )}
-            <Stepper
-              label="Round time"
-              value={roundTime}
-              min={5}
-              max={60}
-              step={5}
-              suffix="sec"
-              onChange={setRoundTime}
-            />
-            <Stepper
-              label="Minimum word combinations"
-              value={minWordCombos}
-              min={1}
-              max={1000}
-              step={10}
-              onChange={setMinWordCombos}
-            />
+              )}
+              {gameMode === "royale" && (
+                <>
+                  <Stepper
+                    label="Lives"
+                    value={lives}
+                    min={1}
+                    max={5}
+                    onChange={setLives}
+                  />
+                  <Stepper
+                    label="New letters every"
+                    value={swapTurns}
+                    min={2}
+                    max={10}
+                    suffix="turns"
+                    onChange={setSwapTurns}
+                  />
+                </>
+              )}
+              <Stepper
+                label="Round time"
+                value={roundTime}
+                min={5}
+                max={60}
+                step={5}
+                suffix="sec"
+                onChange={setRoundTime}
+              />
+              <Stepper
+                label="Minimum word combinations"
+                value={minWordCombos}
+                min={1}
+                max={1000}
+                step={10}
+                onChange={setMinWordCombos}
+              />
 
-            <div>
-              <span className="field-label">Language</span>
-              <div className="flex gap-2">
-                {languages.map((lang) => (
-                  <button
-                    key={lang.value}
-                    type="button"
-                    onClick={() => handleLanguageChange(lang.value)}
-                    className={`keycap-btn flex-1 h-12 text-sm ${
-                      language === lang.value ? "keycap-btn-active" : ""
-                    }`}
-                  >
-                    {lang.label}
-                  </button>
-                ))}
+              <div>
+                <span className="field-label">Language</span>
+                <div className="flex gap-2">
+                  {languages.map((lang) => (
+                    <button
+                      key={lang.value}
+                      type="button"
+                      onClick={() => handleLanguageChange(lang.value)}
+                      className={`keycap-btn flex-1 h-12 text-sm gap-2 ${
+                        language === lang.value ? "keycap-btn-active" : ""
+                      }`}
+                    >
+                      <span aria-hidden>{lang.flag}</span>
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="field-label" htmlFor="banned-atama">
-                Banned starting letters
-              </label>
-              <input
-                id="banned-atama"
-                value={bannedAtama}
-                className="field-input uppercase tracking-[0.3em] font-display"
-                type="text"
-                placeholder="E.G. XQZ"
-                onChange={(e) =>
-                  setBannedAtama(sanitizeBannedLetters(e.target.value, language))
-                }
-              />
-              <p className="field-hint">
-                Words will never start with these letters.
-              </p>
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+              <div>
+                <label className="field-label" htmlFor="banned-atama">
+                  Banned starting letters
+                </label>
+                <input
+                  id="banned-atama"
+                  value={bannedAtama}
+                  className="field-input uppercase tracking-[0.3em] font-display"
+                  type="text"
+                  placeholder="E.G. XQZ"
+                  onChange={(e) =>
+                    setBannedAtama(
+                      sanitizeBannedLetters(e.target.value, language)
+                    )
+                  }
+                />
+                <p className="field-hint">
+                  Words will never start with these letters.
+                </p>
+              </div>
 
-            <div>
-              <label className="field-label" htmlFor="banned-oshiri">
-                Banned ending letters
-              </label>
-              <input
-                id="banned-oshiri"
-                value={bannedOshiri}
-                className="field-input uppercase tracking-[0.3em] font-display"
-                type="text"
-                placeholder="E.G. JQV"
-                onChange={(e) =>
-                  setBannedOshiri(sanitizeBannedLetters(e.target.value, language))
-                }
-              />
-              <p className="field-hint">
-                Words will never end with these letters.
-              </p>
+              <div>
+                <label className="field-label" htmlFor="banned-oshiri">
+                  Banned ending letters
+                </label>
+                <input
+                  id="banned-oshiri"
+                  value={bannedOshiri}
+                  className="field-input uppercase tracking-[0.3em] font-display"
+                  type="text"
+                  placeholder="E.G. JQV"
+                  onChange={(e) =>
+                    setBannedOshiri(
+                      sanitizeBannedLetters(e.target.value, language)
+                    )
+                  }
+                />
+                <p className="field-hint">
+                  Words will never end with these letters.
+                </p>
+              </div>
             </div>
 
             {/* Longest word and battle royale always submit on Enter */}
             {gameMode === "classic" && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={submitOnEnter}
-              onClick={() => setSubmitOnEnter(!submitOnEnter)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-surface-sunken border border-white/10 hover:border-white/25 transition-colors text-left"
-            >
-              <span>
-                <span className="block text-sm font-semibold text-white/80">
-                  End turn with Enter
-                </span>
-                <span className="block text-sm text-white/60">
-                  Press ↵ to submit your word before the timer runs out
-                </span>
-              </span>
-              <span
-                className={`relative flex-shrink-0 w-12 h-7 rounded-full transition-colors ${
-                  submitOnEnter
-                    ? "bg-gradient-to-b from-violet-500 to-violet-700"
-                    : "bg-surface-raised border border-white/10"
-                }`}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={submitOnEnter}
+                onClick={() => setSubmitOnEnter(!submitOnEnter)}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-surface-sunken border border-white/10 hover:border-white/25 transition-colors text-left"
               >
+                <span>
+                  <span className="block text-sm font-semibold text-white/80">
+                    End turn with Enter
+                  </span>
+                  <span className="block text-sm text-white/60">
+                    Press ↵ to submit your word before the timer runs out
+                  </span>
+                </span>
                 <span
-                  className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${
-                    submitOnEnter ? "left-6" : "left-1"
+                  className={`relative flex-shrink-0 w-12 h-7 rounded-full transition-colors ${
+                    submitOnEnter
+                      ? "bg-gradient-to-b from-violet-500 to-violet-700"
+                      : "bg-surface-raised border border-white/10"
                   }`}
-                />
-              </span>
-            </button>
+                >
+                  <span
+                    className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                      submitOnEnter ? "left-6" : "left-1"
+                    }`}
+                  />
+                </span>
+              </button>
             )}
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-2 border-t border-white/10 sm:justify-end">
               <Button
                 variant="secondary"
                 onClick={() => props.setIsOpen(false)}
-                className="flex-1"
+                className="flex-1 sm:flex-none sm:min-w-32"
               >
                 Cancel
               </Button>
-              <Button onClick={handleSave} className="flex-1">
+              <Button
+                onClick={handleSave}
+                className="flex-1 sm:flex-none sm:min-w-32"
+              >
                 Save
               </Button>
             </div>

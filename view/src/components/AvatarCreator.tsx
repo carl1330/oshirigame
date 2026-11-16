@@ -51,7 +51,7 @@ export default function AvatarCreator(props: AvatarCreatorProps) {
   return (
     <Dialog open={props.isOpen} onClose={() => props.setIsOpen(false)}>
       <div className="dialog-backdrop" aria-hidden="true" />
-      <div className="fixed inset-0 flex w-screen items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex w-screen items-center justify-center p-2 sm:p-4 overflow-y-auto">
         <Dialog.Panel className="dialog-panel my-auto">
           <Dialog.Title className="dialog-title mb-5">
             Customize Avatar
@@ -152,7 +152,7 @@ export default function AvatarCreator(props: AvatarCreatorProps) {
                         : "border-white/10 bg-surface-sunken hover:border-white/25"
                     }`}
                   >
-                    {hat || <span className="text-white/30 text-sm">—</span>}
+                    {hat || <span className="text-white/30 text-xs">None</span>}
                   </button>
                 ))}
               </div>
@@ -174,7 +174,7 @@ export default function AvatarCreator(props: AvatarCreatorProps) {
                         : "border-white/10 bg-surface-sunken hover:border-white/25"
                     }`}
                   >
-                    {face || <span className="text-white/30 text-sm">—</span>}
+                    {face || <span className="text-white/30 text-xs">None</span>}
                   </button>
                 ))}
               </div>

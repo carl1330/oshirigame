@@ -1,6 +1,8 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import PlayerAvatar from "./PlayerAvatar";
+import ChatBubble from "./ChatBubble";
 import { MORPH } from "../misc/motion";
+import { Bubble } from "../hooks/useChatBubbles";
 
 export interface RailPlayer {
   username: string;
@@ -19,16 +21,18 @@ interface PlayerRailProps {
   currentUsername?: string;
   /** Battle royale: show lives instead of score */
   showLives?: boolean;
+  /** Live chat bubbles, keyed by username */
+  bubbles?: Record<string, Bubble>;
 }
 
 /** Avatars shown before collapsing the rest into a "+N" chip */
 const MAX_VISIBLE = 5;
 
 function playerTitle(p: RailPlayer, showLives?: boolean) {
-  if (!showLives) return `${p.username} — ${p.score} pts`;
+  if (!showLives) return `${p.username} · ${p.score} pts`;
   return p.eliminated
-    ? `${p.username} — eliminated`
-    : `${p.username} — ${p.lives ?? 0} ${p.lives === 1 ? "life" : "lives"}`;
+    ? `${p.username} · eliminated`
+    : `${p.username} · ${p.lives ?? 0} ${p.lives === 1 ? "life" : "lives"}`;
 }
 
 /**
@@ -90,6 +94,14 @@ export default function PlayerRail(props: PlayerRailProps) {
                 {p.score}
               </span>
             )}
+            <AnimatePresence>
+              {props.bubbles?.[p.username] && (
+                <ChatBubble
+                  key={props.bubbles[p.username].key}
+                  text={props.bubbles[p.username].text}
+                />
+              )}
+            </AnimatePresence>
           </motion.div>
         );
       })}

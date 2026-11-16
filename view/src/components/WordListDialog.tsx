@@ -13,7 +13,7 @@ export default function WordListDialog(props: WordListDialogProps) {
   return (
     <Dialog open={props.isOpen} onClose={() => props.setIsOpen(false)}>
       <div className="dialog-backdrop" aria-hidden="true" />
-      <div className="fixed inset-0 flex w-screen items-center justify-center p-2 sm:p-4">
+      <div className="fixed inset-0 z-50 flex w-screen items-center justify-center p-2 sm:p-4">
         <Dialog.Panel className="dialog-panel max-w-lg flex flex-col max-h-[85vh]">
           <Dialog.Title className="dialog-title mb-1">
             All possible words
@@ -26,7 +26,7 @@ export default function WordListDialog(props: WordListDialogProps) {
             <span className="text-violet-300 font-display font-semibold uppercase">
               {props.oshiri}
             </span>
-            {" — "}
+            {" · "}
             {props.words.length} words, longest first
           </p>
           <div className="flex-1 overflow-y-auto panel-sunken p-3 mb-4">

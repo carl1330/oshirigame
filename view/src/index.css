@@ -86,7 +86,7 @@ body {
 
   /* Modal dialogs */
   .dialog-backdrop {
-    @apply fixed inset-0;
+    @apply fixed inset-0 z-50;
     background: rgba(8, 8, 14, 0.7);
     backdrop-filter: blur(4px);
   }
@@ -101,6 +101,12 @@ body {
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Wider variant for option-heavy dialogs, must come after .dialog-panel
+     so its max-width wins */
+  .dialog-panel-wide {
+    @apply max-w-2xl;
   }
 
   .dialog-title {
@@ -130,7 +136,7 @@ body {
   }
 
   /* Keycap button: the letter-tile physics applied to pressable controls.
-     The 4px drop edge collapses on press — same depth trick as .tile. */
+     The 4px drop edge collapses on press, same depth trick as .tile. */
   .keycap-btn {
     @apply flex items-center justify-center rounded-xl font-display
       font-semibold text-white select-none;

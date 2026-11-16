@@ -1,13 +1,17 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import PlayerAvatar from "./PlayerAvatar";
+import ChatBubble from "./ChatBubble";
 import { MORPH } from "../misc/motion";
 import { RailPlayer } from "./PlayerRail";
+import { Bubble } from "../hooks/useChatBubbles";
 
 interface PlayerCircleProps {
   /** Alive players in turn order (queue head first), then eliminated players */
   players: RailPlayer[];
-  /** Username of the player whose turn it is — seated at the bottom */
+  /** Username of the player whose turn it is, seated at the bottom */
   currentUsername?: string;
+  /** Live chat bubbles, keyed by username */
+  bubbles?: Record<string, Bubble>;
 }
 
 /**
@@ -43,8 +47,8 @@ export default function PlayerCircle(props: PlayerCircleProps) {
             }}
             title={
               p.eliminated
-                ? `${p.username} — eliminated`
-                : `${p.username} — ${p.lives ?? 0} ${
+                ? `${p.username} · eliminated`
+                : `${p.username} · ${p.lives ?? 0} ${
                     p.lives === 1 ? "life" : "lives"
                   }`
             }
@@ -97,6 +101,14 @@ export default function PlayerCircle(props: PlayerCircleProps) {
             >
               {p.username}
             </span>
+            <AnimatePresence>
+              {props.bubbles?.[p.username] && (
+                <ChatBubble
+                  key={props.bubbles[p.username].key}
+                  text={props.bubbles[p.username].text}
+                />
+              )}
+            </AnimatePresence>
           </motion.div>
         );
       })}

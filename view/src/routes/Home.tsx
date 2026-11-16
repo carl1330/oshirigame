@@ -1,4 +1,3 @@
-import Footer from "../components/Footer";
 import "react-toastify/dist/ReactToastify.css";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";
@@ -65,7 +64,7 @@ export default function Home() {
       <div className="flex w-full flex-col gap-2">
         <div className="flex grow justify-center">
           <div className="flex flex-col gap-6 justify-center items-center h-full w-full panel px-4 py-6">
-            {/* Logo spelled in game tiles — the UI teaches the game before it starts */}
+            {/* Logo spelled in game tiles, the UI teaches the game before it starts */}
             <div className="flex flex-wrap justify-center gap-1 sm:gap-1.5 px-2">
               {TITLE.split("").map((letter, index) => (
                 <motion.div
@@ -135,7 +134,6 @@ export default function Home() {
             </form>
           </div>
         </div>
-        <Footer />
       </div>
     </div>
   );

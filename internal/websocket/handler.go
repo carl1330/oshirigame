@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -33,6 +34,7 @@ const (
 	RESET_GAME          = "RESET_GAME"
 	END_TURN            = "END_TURN"
 	ALL_WORDS           = "ALL_WORDS"
+	CHAT_MESSAGE        = "CHAT_MESSAGE"
 	ROOM_NOT_FOUND      = "ROOM_NOT_FOUND"
 	ERROR               = "ERROR"
 )
@@ -134,6 +136,15 @@ type PlayerRanking struct {
 
 type ErrorResponse struct {
 	Message string `json:"message"`
+}
+
+type ChatMessage struct {
+	Message string
+}
+
+type ChatBroadcast struct {
+	Username string `json:"username"`
+	Message  string `json:"message"`
 }
 
 type MessageHandler func(m *Message, c *client) error
@@ -423,7 +434,7 @@ func (h *hub) EndTurn(m *Message, c *client) error {
 		return fmt.Errorf("not this player's turn")
 	}
 
-	// Battle royale always submits on Enter — the chain lives on speed
+	// Battle royale always submits on Enter, the chain lives on speed
 	if game.GetGameMode() != GameModeRoyale && !game.GetSubmitOnEnter() {
 		return fmt.Errorf("submit on enter is disabled")
 	}
@@ -447,7 +458,7 @@ func (h *hub) AllWords(m *Message, c *client) error {
 		return fmt.Errorf("round is not over")
 	}
 
-	// Battle royale keeps the same letters for several turns — revealing the
+	// Battle royale keeps the same letters for several turns, revealing the
 	// word list mid-cycle would spoil the turns still to play on it
 	if game.GetGameMode() == GameModeRoyale && !game.ShouldSwapLetters() && !game.RoyaleGameOver() {
 		return fmt.Errorf("letters are still in play")
@@ -470,6 +481,60 @@ func (h *hub) AllWords(m *Message, c *client) error {
 		Type: ALL_WORDS,
 		Data: data,
 	}
+
+	return nil
+}
+
+// Chat length cap in runes and the per-player cooldown between messages.
+const (
+	chatMaxLen      = 100
+	chatMinInterval = 500 * time.Millisecond
+)
+
+// Chat broadcasts a short message from a player to everyone in the room,
+// shown as a speech bubble under their avatar.
+func (h *hub) Chat(m *Message, c *client) error {
+	var chatMessage ChatMessage
+	if err := json.Unmarshal(m.Data, &chatMessage); err != nil {
+		return fmt.Errorf("error unmarshalling message data")
+	}
+
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	player, err := game.GetPlayer(c.token)
+
+	if err != nil {
+		return err
+	}
+
+	text := strings.TrimSpace(chatMessage.Message)
+	if text == "" {
+		return nil
+	}
+	if runes := []rune(text); len(runes) > chatMaxLen {
+		text = string(runes[:chatMaxLen])
+	}
+
+	// Silently drop spam instead of erroring, the sender still sees their
+	// own last bubble, so nothing looks broken
+	if !player.AllowChat(time.Now(), chatMinInterval) {
+		return nil
+	}
+
+	data, err := json.Marshal(ChatBroadcast{
+		Username: player.Username,
+		Message:  text,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	game.BroadcastMessage(CHAT_MESSAGE, data)
 
 	return nil
 }

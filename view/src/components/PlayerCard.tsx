@@ -6,7 +6,7 @@ interface PlayerCardProps {
   score: number;
   /** It's this player's turn right now (glow + "playing" badge) */
   isCurrentPlayer: boolean;
-  /** Stable room admin (crown) — controls options and round flow */
+  /** Stable room admin (crown), controls options and round flow */
   isHost: boolean;
 }
 

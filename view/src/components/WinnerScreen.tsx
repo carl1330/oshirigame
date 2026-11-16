@@ -266,7 +266,7 @@ export default function WinnerScreen(props: WinnerScreenProps) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full gap-5 px-4 py-6">
         <h1 className="font-display font-bold text-xs sm:text-sm tracking-[0.3em] uppercase text-violet-300">
-          — The Awards —
+          The Awards
         </h1>
         <AnimatePresence mode="wait">
           <AwardCard key={awardIndex} award={awards[awardIndex]} />
@@ -305,7 +305,7 @@ export default function WinnerScreen(props: WinnerScreenProps) {
         />
       )}
       <h1 className="font-display font-bold text-xs sm:text-sm tracking-[0.3em] uppercase text-violet-300">
-        — Final Standings —
+        Final Standings
       </h1>
 
       {/* Podium: steps rise 3rd → 2nd → 1st, Jackbox-style suspense */}

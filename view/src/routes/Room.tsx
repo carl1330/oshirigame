@@ -1,5 +1,4 @@
 import { useNavigate, useParams } from "react-router-dom";
-import Footer from "../components/Footer";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import useWebSocket from "react-use-websocket";
 import { Oval } from "react-loader-spinner";
@@ -26,6 +25,10 @@ import WordListDialog from "../components/WordListDialog";
 import AvatarCreator from "../components/AvatarCreator";
 import PlayerAvatar from "../components/PlayerAvatar";
 import MuteButton from "../components/MuteButton";
+import ChatInput from "../components/ChatInput";
+import { useChatBubbles } from "../hooks/useChatBubbles";
+import useSound from "use-sound";
+import heartbeatSound from "../../public/sounds/heartbeat.mp3";
 import { FaPen } from "react-icons/fa";
 
 export type Event = {
@@ -70,7 +73,7 @@ type Player = {
   score: number;
   /** It's this player's turn (head of the queue) */
   isLeader: boolean;
-  /** Stable room admin — controls options, starting and round flow */
+  /** Stable room admin, controls options, starting and round flow */
   isHost: boolean;
   /** Battle royale: remaining lives */
   lives: number;
@@ -91,6 +94,11 @@ interface PlayerInputMessage {
 }
 
 interface NewMessage {
+  message: string;
+}
+
+interface ChatMessageEvent {
+  username: string;
   message: string;
 }
 
@@ -190,8 +198,8 @@ const ELIMINATED_PHRASES = [
   "won't be coming back!",
 ];
 const tooShortPhrases = (n: number) => [
-  `Too short — the chain needed ${n} letters`,
-  `Needed ${n} letters — that fell short`,
+  `Too short! The chain needed ${n} letters`,
+  `Needed ${n} letters, that fell short`,
   `Shy of the ${n}-letter bar`,
 ];
 
@@ -209,6 +217,7 @@ export type Message =
   | GameOverResponse
   | NewLetterEvent
   | NewMessage
+  | ChatMessageEvent
   | GameOptionsEvent
   | AllWordsResponse
   | null;
@@ -231,6 +240,7 @@ export const EventRoundOshiri = "ROUND_OSHIRI";
 export const EventUpdateGameOptions = "UPDATE_GAME_OPTIONS";
 export const EventEndTurn = "END_TURN";
 export const EventAllWords = "ALL_WORDS";
+export const EventChatMessage = "CHAT_MESSAGE";
 export const Error = "ERROR";
 
 /** Read-only summary of the room settings so every player knows the rules */
@@ -286,7 +296,7 @@ function useCopyInvite() {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error(err);
-      toast.error("Couldn't copy the link — copy the address bar URL instead");
+      toast.error("Couldn't copy the link. Copy the address bar URL instead");
     }
   }
 
@@ -317,7 +327,7 @@ export default function Room() {
   const [gamePropsOpen, setGamePropsOpen] = useState(false);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [gameOver, setGameOver] = useState(false);
-  // GAME_OVER arrives right after the last ROUND_FINISHED — hold the winner
+  // GAME_OVER arrives right after the last ROUND_FINISHED, hold the winner
   // screen so players can look at the final round's results first
   const [gameOverPending, setGameOverPending] = useState(false);
   const [winners, setWinners] = useState<PlayerRanking[]>([]);
@@ -332,13 +342,48 @@ export default function Room() {
   const [reconnecting, setReconnecting] = useState(false);
   const navigate = useNavigate();
   const { copied, copy } = useCopyInvite();
+  const { bubbles, showBubble } = useChatBubbles();
+
+  // Heartbeat under the final seconds: a continuous heartbeat track starts
+  // when the clock crosses 7s and stops the moment the round ends or the
+  // timer resets. Instead of restarting at a new speed, the playback rate
+  // ramps one step per tick (1.0 at 7s up to 2.2 at 1s) so the pulse
+  // accelerates smoothly. Routed through howler, so the global mute button
+  // silences it too.
+  const [heartbeat, { stop: stopHeartbeat, sound: heartbeatHowl }] = useSound(
+    heartbeatSound,
+    { volume: 0.9 }
+  );
+  const heartbeatOn = useRef(false);
+  const timeLeft = gameState?.time;
+  useEffect(() => {
+    const live =
+      !!gameState?.started &&
+      !roundOver &&
+      timeLeft !== undefined &&
+      timeLeft > 0 &&
+      timeLeft <= 7;
+    if (live) {
+      const rate = 1 + 0.2 * (7 - Math.max(1, timeLeft));
+      if (!heartbeatOn.current) {
+        heartbeatOn.current = true;
+        heartbeat({ playbackRate: rate });
+      } else {
+        heartbeatHowl?.rate(rate);
+      }
+    } else if (heartbeatOn.current) {
+      heartbeatOn.current = false;
+      stopHeartbeat();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, roundOver, gameState?.started]);
 
   // Lobby → game entry window: drives the "GO!" stamp and the slow, beat-
   // delayed shared-element morphs. Outside it, layout changes (e.g. the word
   // growing while typing) must snap fast, so elements never lag over content.
   // Set during render (not in an effect) so the game screen's very first
   // commit already carries the slow morph transitions. Only fires when we
-  // watched the lobby become a game — never on reconnects straight into one.
+  // watched the lobby become a game, never on reconnects straight into one.
   const [entering, setEntering] = useState(false);
   const prevStartedRef = useRef<boolean | undefined>(undefined);
   if (gameState && prevStartedRef.current !== gameState.started) {
@@ -366,8 +411,8 @@ export default function Room() {
     : null;
 
   // Two-phase round-over reveal: first the word verdict plays out (tiles
-  // popping green/red), then — once it has finished and had a beat to be
-  // read — the rest of the results slide in (top words, next-round button)
+  // popping green/red), then, once it has finished and had a beat to be
+  // read, the rest of the results slide in (top words, next-round button)
   const [verdictShown, setVerdictShown] = useState(false);
   useEffect(() => {
     if (!roundOver) {
@@ -448,7 +493,7 @@ export default function Room() {
     },
     onOpen: () => {
       setReconnecting(false);
-      // Rejoin automatically after a reconnect — the server keeps our seat
+      // Rejoin automatically after a reconnect, the server keeps our seat
       // for a grace period, keyed by our token
       if (usernameRef.current !== "" && gameId) {
         const event: Event = {
@@ -538,7 +583,7 @@ export default function Room() {
         }
 
         // After a reconnect mid-game the ROUND_ATAMA/OSHIRI events are long
-        // gone — recover the round letters from the shared state
+        // gone, recover the round letters from the shared state
         if (gameState.started) {
           setAtama((a) => a || gameState.atama);
           setOshiri((o) => o || gameState.oshiri);
@@ -557,7 +602,7 @@ export default function Room() {
         break;
       }
       case EventNextRound: {
-        // Broadcast to every client (leader included) — spin both scrollers
+        // Broadcast to every client (leader included), spin both scrollers
         const nextState = event.data as GameState;
         roundOverRef.current = false;
         setRoundOver(false);
@@ -617,7 +662,7 @@ export default function Room() {
         break;
       }
       case EventRoomNotFound:
-        toast.error("Room not found — it may have expired");
+        toast.error("Room not found. It may have expired");
         leavingRef.current = true;
         navigate("/");
         break;
@@ -632,6 +677,11 @@ export default function Room() {
       case EventAllWords: {
         setAllWords(event.data as AllWordsResponse);
         setWordListOpen(true);
+        break;
+      }
+      case EventChatMessage: {
+        const chat = event.data as ChatMessageEvent;
+        showBubble(chat.username, chat.message);
         break;
       }
       case EventGameOver: {
@@ -666,7 +716,7 @@ export default function Room() {
     }
   }, [playerInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ESC opens the pause menu — unless a dialog is already open, in which
+  // ESC opens the pause menu, unless a dialog is already open, in which
   // case ESC belongs to that dialog (headlessui closes it on the same press)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -714,7 +764,7 @@ export default function Room() {
           <div className="flex grow justify-center">
             <div className="flex flex-col gap-4 justify-center items-center h-full w-full panel px-4 py-6">
               <h1 className="text-white font-display text-2xl sm:text-3xl font-semibold text-center">Join room</h1>
-              {/* Avatar preview — tap the pencil to customize */}
+              {/* Avatar preview, tap the pencil to customize */}
               <div className="relative">
                 <div className="rounded-full p-1.5 bg-surface-sunken border border-white/10">
                   <PlayerAvatar
@@ -775,7 +825,6 @@ export default function Room() {
               </form>
             </div>
           </div>
-          <Footer />
         </div>
       </div>
     );
@@ -790,7 +839,6 @@ export default function Room() {
           </div>
           <div className="hidden sm:flex flex-col gap-2 h-full justify-center items-center panel-sunken"></div>
         </div>
-        <Footer />
       </div>
     );
   }
@@ -876,13 +924,17 @@ export default function Room() {
     navigate("/");
   }
 
+  function handleSendChat(text: string) {
+    sendEvent(EventChatMessage, { message: text });
+  }
+
   return (
     <MotionConfig reducedMotion="user">
     <LayoutGroup>
     <div className="flex flex-col h-screen p-2 gap-2">
-      <div className="flex grow w-full gap-2 min-h-0">
+      <div className="flex grow w-full gap-2 min-h-0 relative">
         {/* popLayout keeps the leaving screen rendered (absolute) while the
-            next one mounts — required for the shared-element morphs and the
+            next one mounts, required for the shared-element morphs and the
             crossfade between lobby and game */}
         <AnimatePresence mode="popLayout" initial={false}>
         {gameOver ? (
@@ -894,7 +946,7 @@ export default function Room() {
             transition={{ duration: 0.3 }}
             className="flex grow flex-col justify-center items-center panel relative"
           >
-            {/* Menu button — non-hosts need a way out of the winner screen */}
+            {/* Menu button, non-hosts need a way out of the winner screen */}
             <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex gap-2 z-10">
               <MuteButton />
               <button
@@ -928,6 +980,7 @@ export default function Room() {
                 <div className="flex-none pl-1 pt-1">
                   <PlayerRail
                     players={railPlayers}
+                    bubbles={bubbles}
                     currentUsername={
                       !isLongest &&
                       !roundOver &&
@@ -947,7 +1000,7 @@ export default function Room() {
                 {isRoyale
                   ? `Turn ${gameState.round} · ${aliveCount} left`
                   : `Round ${gameState.round}/${gameState.maxRounds}`}{" "}
-                —{" "}
+                ·{" "}
                 {roundOver
                   ? isRoyale
                     ? "Turn over"
@@ -988,16 +1041,17 @@ export default function Room() {
             </AnimatePresence>
 
             {/* Battle royale: players ring the play area, current player's
-                seat at bottom center. The queue head is always highlighted —
+                seat at bottom center. The queue head is always highlighted;
                 during the result display the ring already rotates to preview
-                who's up next. pointer-events-none keeps the layer — which
-                sits above the static content column — from swallowing clicks
+                who's up next. pointer-events-none keeps the layer (which
+                sits above the static content column) from swallowing clicks
                 on the input tiles; seats re-enable their own pointer events
                 for tooltips. */}
             {isRoyale && (
               <div className="absolute inset-x-3 top-20 bottom-3 sm:inset-x-10 sm:top-24 sm:bottom-8 z-0 pointer-events-none">
                 <PlayerCircle
                   players={railPlayers}
+                  bubbles={bubbles}
                   currentUsername={
                     gameState.playerQueue.length > 0
                       ? gameState.playerQueue[0].username
@@ -1009,9 +1063,12 @@ export default function Room() {
 
             {/* Scrollable content area: centers when it fits the browser
                 height, scrolls under the fixed top bar when it doesn't */}
-            <div className="flex grow flex-col items-center gap-4 w-full min-h-0 overflow-y-auto px-2 pt-20 pb-4 sm:pt-28">
+            {/* Symmetric vertical padding so centered content sits at the true
+                panel center (the top bar overlays the top padding), yet still
+                clears the bar when tall content scrolls */}
+            <div className="flex grow flex-col items-center gap-4 w-full min-h-0 overflow-y-auto px-2 pt-20 pb-20 sm:pt-28 sm:pb-28">
             {/* mode="wait": the live round UI slides out first, then the
-                results cascade in — and the reverse on next round */}
+                results cascade in, and the reverse on next round */}
             <AnimatePresence mode="wait" initial={false}>
             {!roundOver ? (
             <motion.div
@@ -1023,14 +1080,14 @@ export default function Room() {
               className="flex flex-col justify-center items-center gap-4 w-full my-auto shrink-0"
             >
               <div className="flex flex-col justify-center items-center gap-2 sm:gap-3">
-                {/* Timer: critical info — big, and pulses red when running out.
+                {/* Timer: critical info, big, and pulses red when running out.
                     Shares a layoutId with the lobby Start button so one morphs
                     into the other on game start. */}
                 <motion.div
                   layoutId="start-timer"
                   transition={tileTransition(BEAT.timer)}
                   className={`flex items-center justify-center rounded-full border font-display font-bold tabular-nums min-w-[72px] px-5 py-2 text-2xl sm:text-3xl transition-colors ${
-                    gameState.time <= 5
+                    gameState.time <= 7
                       ? "text-red-400 border-red-500/60 bg-red-500/10 animate-pulse-urgent"
                       : "text-white border-white/15 bg-surface-sunken"
                   }`}
@@ -1048,7 +1105,7 @@ export default function Room() {
                 >
                   <div
                     className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${
-                      gameState.time <= 5 ? "bg-red-500" : "bg-violet-500"
+                      gameState.time <= 7 ? "bg-red-500" : "bg-violet-500"
                     }`}
                     style={{
                       width: `${Math.min(
@@ -1067,7 +1124,7 @@ export default function Room() {
                   >
                     <p className="text-white font-display font-semibold text-sm sm:text-base">
                       {gameState.requiredLength > 0
-                        ? `Beat the chain — at least ${gameState.requiredLength} letters`
+                        ? `Beat the chain: at least ${gameState.requiredLength} letters`
                         : "Any valid word starts the chain"}
                     </p>
                     <p className="text-white/60 text-sm">
@@ -1077,7 +1134,7 @@ export default function Room() {
                     </p>
                     {player.eliminated && (
                       <p className="text-white/40 text-sm">
-                        💀 You're out — spectating
+                        💀 You're out, spectating
                       </p>
                     )}
                   </motion.div>
@@ -1240,7 +1297,7 @@ export default function Room() {
                 )}
               </motion.div>
             )}
-            {/* Longest-word mode results: everyone's word side by side —
+            {/* Longest-word mode results: everyone's word side by side,
                 revealed after your own word's verdict animation */}
             {isLongest && verdictShown && playerWords.length > 0 && (
               <motion.div layout className="flex flex-col gap-1.5 w-full max-w-md">
@@ -1398,12 +1455,13 @@ export default function Room() {
               players={gameState.playerQueue}
               onInvite={copy}
               copied={copied}
+              bubbles={bubbles}
             />
             <SettingsSummary gameState={gameState} />
             {player.isHost ? (
               <>
                 <div className="flex flex-col items-center gap-3 w-full max-w-xs mb-auto shrink-0">
-                  {/* Shares a layoutId with the in-game timer pill — on start
+                  {/* Shares a layoutId with the in-game timer pill, on start
                       the button shrinks and morphs into the countdown */}
                   <motion.div
                     layoutId="start-timer"
@@ -1444,8 +1502,11 @@ export default function Room() {
           </motion.div>
         )}
         </AnimatePresence>
+        {/* Chat pill: messages pop up as speech bubbles under avatars */}
+        <div className="absolute bottom-2 left-2 sm:bottom-4 sm:left-4 z-20">
+          <ChatInput onSend={handleSendChat} />
+        </div>
       </div>
-      <Footer />
       
       {/* All possible words for the finished round */}
       {allWords && (
@@ -1458,7 +1519,7 @@ export default function Room() {
         />
       )}
 
-      {/* Reconnecting overlay — the server holds our seat for a grace period */}
+      {/* Reconnecting overlay, the server holds our seat for a grace period */}
       {reconnecting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="dialog-backdrop" aria-hidden="true" />
@@ -1466,7 +1527,7 @@ export default function Room() {
             <Oval color="#a78bfa" secondaryColor="#4c1d95" width={48} height={48} />
             <p className="font-display font-semibold text-lg">Reconnecting…</p>
             <p className="text-white/60 text-sm">
-              Connection lost. Hang tight — your spot in the game is saved for
+              Connection lost. Hang tight, your spot in the game is saved for
               a little while.
             </p>
           </div>

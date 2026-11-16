@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import { FaArrowLeft, FaPlay } from "react-icons/fa";
 import { Oval } from "react-loader-spinner";
 import Button from "../components/Button";
-import Footer from "../components/Footer";
 import LetterBoxInput from "../components/LetterBoxInput";
 import DailyLeaderboard, {
   LeaderboardEntry,
@@ -403,7 +402,7 @@ export default function Daily() {
                               r.accepted ? "text-violet-300" : "text-white/30"
                             }
                           >
-                            {r.accepted ? `+${r.score}` : "—"}
+                            {r.accepted ? `+${r.score}` : "·"}
                           </span>
                         </div>
                       ))}
@@ -445,7 +444,6 @@ export default function Daily() {
             )}
           </div>
         </div>
-        <Footer />
       </div>
     </div>
   );
