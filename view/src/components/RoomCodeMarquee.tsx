@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { MORPH } from "../misc/motion";
 
@@ -16,23 +17,30 @@ export default function RoomCodeMarquee(props: RoomCodeMarqueeProps) {
   const chars = props.code.split("");
   const last = chars.length - 1;
 
+  // Tiles shrink with the browser width so long codes never overflow the
+  // panel: full 4rem tiles when there's room, down to a 1.5rem floor
+  // (flex-wrap catches the pathological rest)
+  const tileSize = {
+    "--tile": `clamp(1.5rem, calc((100vw - 12rem) / ${chars.length}), 4rem)`,
+  } as CSSProperties;
+  const tileClass =
+    "tile w-[var(--tile)] h-[var(--tile)] text-[length:calc(var(--tile)*0.62)] " +
+    "transition-shadow group-hover:shadow-[0_4px_0_#15151f,0_0_16px_rgba(139,92,246,0.5)]";
+
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-2 max-w-full">
       <button
         type="button"
         onClick={props.onCopy}
         aria-label="Copy invite link"
-        className="flex items-center gap-1 sm:gap-1.5 group"
+        style={tileSize}
+        className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 group max-w-full px-2"
       >
         <span className="text-white/40 font-display text-xs sm:text-sm uppercase tracking-widest mr-1.5">
           Room
         </span>
         {chars.map((c, i) => {
-          const tile = (
-            <div className="tile transition-shadow group-hover:shadow-[0_4px_0_#15151f,0_0_16px_rgba(139,92,246,0.5)]">
-              {c.toUpperCase()}
-            </div>
-          );
+          const tile = <div className={tileClass}>{c.toUpperCase()}</div>;
           if (i === 0) {
             return (
               <motion.div key={i} layoutId="anchor-atama" transition={MORPH}>

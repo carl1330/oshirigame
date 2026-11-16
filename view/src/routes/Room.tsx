@@ -265,6 +265,43 @@ export default function Room() {
     return () => window.clearTimeout(timeout);
   }, [entering]);
 
+  // Two-phase round-over reveal: first the word verdict plays out (tiles
+  // popping green/red), then — once it has finished and had a beat to be
+  // read — the rest of the results slide in (top words, next-round button)
+  const [verdictShown, setVerdictShown] = useState(false);
+  useEffect(() => {
+    if (!roundOver) {
+      setVerdictShown(false);
+      return;
+    }
+    const isLongestMode = gameState?.gameMode === "longest";
+    // Per-letter pops (50ms stagger, ~0.3s each) + verdict label, then a
+    // reading beat. In longest mode the verdict is your own word.
+    const ownWord = isLongestMode
+      ? playerWords.find((r) => r.username === username)?.word ?? ""
+      : finishedWord;
+    const ms = ownWord.length * 50 + 1400;
+    const timeout = window.setTimeout(() => setVerdictShown(true), ms);
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundOver]);
+
+  // Round-over reveal: results cascade in one after another once the live
+  // round UI has cleared out (verdict → words → top words → next button)
+  const resultsContainer = {
+    hidden: {},
+    show: { transition: { staggerChildren: 0.12, delayChildren: 0.15 } },
+  };
+  const resultsItem = {
+    hidden: { opacity: 0, y: 16, scale: 0.97 },
+    show: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+    },
+  };
+
   // Fast layout transition for live play; slow beat morphs only on entry
   const tileTransition = (beat: number) =>
     entering ? { ...MORPH, delay: beat } : { duration: 0.2, ease: "easeOut" };
@@ -634,6 +671,10 @@ export default function Room() {
   }
 
   const isLongest = gameState.gameMode === "longest";
+  // In longest mode the round-over verdict animation plays on your own word
+  const ownResult = isLongest
+    ? playerWords.find((r) => r.username === player.username)
+    : undefined;
   const hostName =
     gameState.playerQueue.find((p) => p.isHost)?.username ?? "the host";
 
@@ -698,7 +739,7 @@ export default function Room() {
     <MotionConfig reducedMotion="user">
     <LayoutGroup>
     <div className="flex flex-col h-screen p-2 gap-2">
-      <div className="flex grow w-full gap-2">
+      <div className="flex grow w-full gap-2 min-h-0">
         {/* popLayout keeps the leaving screen rendered (absolute) while the
             next one mounts — required for the shared-element morphs and the
             crossfade between lobby and game */}
@@ -737,7 +778,7 @@ export default function Room() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="flex grow flex-col justify-center items-center panel gap-4 px-2 pt-24 pb-4 sm:pt-28 relative"
+            className="flex grow flex-col panel relative min-h-0 overflow-hidden"
           >
             {/* Top bar: player rail · round header · controls */}
             <div className="absolute top-0 inset-x-0 z-10 flex items-center gap-2 sm:gap-4 p-2 sm:p-4">
@@ -795,7 +836,21 @@ export default function Room() {
               )}
             </AnimatePresence>
 
-            {!roundOver && (
+            {/* Scrollable content area: centers when it fits the browser
+                height, scrolls under the fixed top bar when it doesn't */}
+            <div className="flex grow flex-col items-center gap-4 w-full min-h-0 overflow-y-auto px-2 pt-20 pb-4 sm:pt-28">
+            {/* mode="wait": the live round UI slides out first, then the
+                results cascade in — and the reverse on next round */}
+            <AnimatePresence mode="wait" initial={false}>
+            {!roundOver ? (
+            <motion.div
+              key="live-round"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14, scale: 0.98 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="flex flex-col justify-center items-center gap-4 w-full my-auto shrink-0"
+            >
               <div className="flex flex-col justify-center items-center gap-2 sm:gap-3">
                 {/* Timer: critical info — big, and pulses red when running out.
                     Shares a layoutId with the lobby Start button so one morphs
@@ -857,9 +912,8 @@ export default function Room() {
                   )
                 )}
               </div>
-            )}
             <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-center w-full max-w-full px-2">
-              {(isLongest || player.isLeader) && !roundOver && (
+              {(isLongest || player.isLeader) && (
                 <>
                   <motion.div
                     layoutId="anchor-atama"
@@ -895,7 +949,7 @@ export default function Room() {
                   </motion.div>
                 </>
               )}
-              {!isLongest && !player.isLeader && !roundOver && (
+              {!isLongest && !player.isLeader && (
                 <>
                   <motion.div
                     layoutId="anchor-atama"
@@ -919,19 +973,47 @@ export default function Room() {
                   </motion.div>
                 </>
               )}
-              {roundOver && !isLongest && (
-                <LetterBoxFinished
-                  text={finishedWord}
-                  wordAccepted={wordAccepted}
-                />
-              )}
             </div>
-            {/* Longest-word mode results: everyone's word side by side */}
-            {roundOver && isLongest && playerWords.length > 0 && (
-              <div className="flex flex-col gap-1.5 w-full max-w-md">
+            </motion.div>
+            ) : (
+            <motion.div
+              key="round-results"
+              variants={resultsContainer}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0, y: -14, transition: { duration: 0.2, ease: "easeIn" } }}
+              className="flex flex-col justify-center items-center gap-3 sm:gap-4 w-full my-auto shrink-0"
+            >
+            {(!isLongest || ownResult) && (
+              <motion.div
+                layout
+                variants={resultsItem}
+                className="flex flex-wrap gap-1 sm:gap-1.5 justify-center w-full max-w-full px-2"
+              >
+                <LetterBoxFinished
+                  text={
+                    isLongest
+                      ? ownResult!.word.toUpperCase()
+                      : finishedWord
+                  }
+                  wordAccepted={isLongest ? ownResult!.accepted : wordAccepted}
+                />
+              </motion.div>
+            )}
+            {/* Longest-word mode results: everyone's word side by side —
+                revealed after your own word's verdict animation */}
+            {isLongest && verdictShown && playerWords.length > 0 && (
+              <motion.div layout className="flex flex-col gap-1.5 w-full max-w-md">
                 {playerWords.map((result, key) => (
-                  <div
+                  <motion.div
                     key={key}
+                    initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{
+                      duration: 0.35,
+                      ease: [0.22, 1, 0.36, 1],
+                      delay: key * 0.08,
+                    }}
                     className={`flex items-center gap-3 px-3 py-2 rounded-xl border ${
                       result.winner
                         ? "bg-violet-500/15 border-violet-400/50"
@@ -967,12 +1049,22 @@ export default function Room() {
                         <FaTimesCircle className="text-red-400" aria-label="Not a valid word" />
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
             )}
-            {roundOver && topWords.length > 0 && (
-              <div className="flex flex-col gap-2 items-center max-w-full">
+            {verdictShown && topWords.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{
+                  duration: 0.35,
+                  ease: [0.22, 1, 0.36, 1],
+                  // In longest mode, wait for the word rows to cascade first
+                  delay: isLongest ? playerWords.length * 0.08 + 0.1 : 0,
+                }}
+                className="flex flex-col gap-2 items-center max-w-full"
+              >
                 <span className="text-white/50 font-display text-sm sm:text-base uppercase tracking-widest">
                   Top words
                 </span>
@@ -993,23 +1085,40 @@ export default function Room() {
                 >
                   Show all possible words
                 </button>
-              </div>
+              </motion.div>
             )}
-            {roundOver && gameOverPending ? (
-              // Final round: everyone reveals the winner screen at their own pace
-              <Button
-                onClick={() => setGameOver(true)}
-                className="w-full max-w-xs py-3"
-              >
-                Show final results
-              </Button>
-            ) : roundOver && player.isHost ? (
-              <Button onClick={handleStartRound} className="w-full max-w-xs py-3">Next round</Button>
-            ) : (
-              <p className="text-white text-center text-sm px-4">
-                {roundOver && `Waiting for ${hostName} to start next round`}
-              </p>
+            {verdictShown && (
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{
+                duration: 0.35,
+                ease: [0.22, 1, 0.36, 1],
+                delay: (isLongest ? playerWords.length * 0.08 + 0.1 : 0) + 0.12,
+              }}
+              className="w-full flex justify-center"
+            >
+              {gameOverPending ? (
+                // Final round: everyone reveals the winner screen at their own pace
+                <Button
+                  onClick={() => setGameOver(true)}
+                  className="w-full max-w-xs py-3"
+                >
+                  Show final results
+                </Button>
+              ) : player.isHost ? (
+                <Button onClick={handleStartRound} className="w-full max-w-xs py-3">Next round</Button>
+              ) : (
+                <p className="text-white text-center text-sm px-4">
+                  Waiting for {hostName} to start next round
+                </p>
+              )}
+            </motion.div>
             )}
+            </motion.div>
+            )}
+            </AnimatePresence>
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -1018,7 +1127,7 @@ export default function Room() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
-            className="flex grow flex-col justify-center items-center panel gap-4 px-4 py-6 relative"
+            className="flex grow flex-col items-center panel gap-4 px-4 py-6 relative min-h-0 overflow-y-auto"
           >
             {/* Mute + menu buttons for lobby */}
             <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex gap-2 z-10">
@@ -1032,7 +1141,7 @@ export default function Room() {
               </button>
             </div>
 
-            <p className="text-white/50 font-display text-sm sm:text-base uppercase tracking-widest text-center">
+            <p className="text-white/50 font-display text-sm sm:text-base uppercase tracking-widest text-center mt-auto pt-14 sm:pt-2">
               Lobby · waiting for players
             </p>
             <RoomCodeMarquee code={gameId ?? ""} copied={copied} onCopy={copy} />
@@ -1044,7 +1153,7 @@ export default function Room() {
             <SettingsSummary gameState={gameState} />
             {player.isHost ? (
               <>
-                <div className="flex flex-col items-center gap-3 w-full max-w-xs">
+                <div className="flex flex-col items-center gap-3 w-full max-w-xs mb-auto shrink-0">
                   {/* Shares a layoutId with the in-game timer pill — on start
                       the button shrinks and morphs into the countdown */}
                   <motion.div
@@ -1077,7 +1186,7 @@ export default function Room() {
                 </div>
               </>
             ) : (
-              <p className="text-white text-center text-sm sm:text-base px-4">
+              <p className="text-white text-center text-sm sm:text-base px-4 mb-auto">
                 Waiting for {hostName} to start the game
               </p>
             )}
