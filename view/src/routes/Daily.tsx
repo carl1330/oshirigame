@@ -83,34 +83,40 @@ export default function Daily() {
   const fetchLeaderboard = useCallback(
     async (lang: string) => {
       try {
-        const res = await fetch(`${api}/daily/leaderboard?language=${lang}`);
+        const res = await fetch(`${api}/api/daily/leaderboard?language=${lang}`);
         const data = await res.json();
-        setLeaderboard(data.entries ?? []);
-        setTotalPlayers(data.total ?? 0);
+        return {
+          entries: (data.entries ?? []) as LeaderboardEntry[],
+          total: (data.total ?? 0) as number,
+        };
       } catch {
         // Leaderboard is decorative on the intro screen; ignore failures
+        return null;
       }
     },
     [api]
   );
 
-  // Load today's challenge whenever the language changes
+  // Load today's challenge whenever the language changes. Challenge and
+  // leaderboard are applied together so stale entries never flash in between.
   useEffect(() => {
     let cancelled = false;
     setPhase("loading");
     (async () => {
       try {
         const token = getDailyToken();
-        const res = await fetch(
-          `${api}/daily?language=${language}&token=${token}`
-        );
+        const [res, board] = await Promise.all([
+          fetch(`${api}/api/daily?language=${language}&token=${token}`),
+          fetchLeaderboard(language),
+        ]);
         if (!res.ok) throw new Error(`daily failed: ${res.status}`);
         const data: Challenge = await res.json();
         if (cancelled) return;
         setChallenge(data);
-        setPhase(data.played ? "done" : "intro");
+        setLeaderboard(board?.entries ?? []);
+        setTotalPlayers(board?.total ?? 0);
         setResult(null);
-        fetchLeaderboard(language);
+        setPhase(data.played ? "done" : "intro");
       } catch (err) {
         console.error(err);
         if (!cancelled) {
@@ -128,7 +134,7 @@ export default function Daily() {
     async (words: string[]) => {
       setPhase("submitting");
       try {
-        const res = await fetch(`${api}/daily/submit`, {
+        const res = await fetch(`${api}/api/daily/submit`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -143,9 +149,13 @@ export default function Daily() {
         if (!res.ok) {
           throw new Error(data.error ?? `submit failed: ${res.status}`);
         }
+        const board = await fetchLeaderboard(language);
+        if (board) {
+          setLeaderboard(board.entries);
+          setTotalPlayers(board.total);
+        }
         setResult(data);
         setPhase("done");
-        fetchLeaderboard(language);
       } catch (err) {
         console.error(err);
         toast.error(
@@ -302,6 +312,7 @@ export default function Daily() {
                     Today's leaderboard
                   </h2>
                   <DailyLeaderboard
+                    key={language}
                     entries={leaderboard}
                     total={totalPlayers}
                   />
@@ -418,6 +429,7 @@ export default function Daily() {
                     Today's leaderboard
                   </h2>
                   <DailyLeaderboard
+                    key={language}
                     entries={leaderboard}
                     total={totalPlayers}
                     highlightUsername={

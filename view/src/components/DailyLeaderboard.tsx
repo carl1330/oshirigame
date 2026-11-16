@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import PlayerAvatar from "./PlayerAvatar";
 
 export interface LeaderboardEntry {
@@ -20,9 +21,13 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 export default function DailyLeaderboard(props: DailyLeaderboardProps) {
   if (props.entries.length === 0) {
     return (
-      <p className="text-white/40 text-center py-6">
+      <motion.p
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-white/40 text-center py-6"
+      >
         No scores yet today. Be the first!
-      </p>
+      </motion.p>
     );
   }
 
@@ -33,8 +38,11 @@ export default function DailyLeaderboard(props: DailyLeaderboardProps) {
           entry.username === props.highlightUsername &&
           entry.rank === props.highlightRank;
         return (
-          <div
-            key={index}
+          <motion.div
+            key={`${index}-${entry.username}-${entry.score}`}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: index * 0.04 }}
             className={`flex items-center gap-3 px-3 py-2 rounded-xl ${
               isViewer
                 ? "bg-violet-500/20 border border-violet-400/40"
@@ -51,13 +59,18 @@ export default function DailyLeaderboard(props: DailyLeaderboardProps) {
             <span className="font-display font-semibold text-violet-300">
               {entry.score}
             </span>
-          </div>
+          </motion.div>
         );
       })}
       {props.total > props.entries.length && (
-        <p className="text-white/40 text-sm text-center pt-1">
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: props.entries.length * 0.04 }}
+          className="text-white/40 text-sm text-center pt-1"
+        >
           {props.total} players today
-        </p>
+        </motion.p>
       )}
     </div>
   );

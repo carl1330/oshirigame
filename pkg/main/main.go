@@ -46,9 +46,11 @@ func main() {
 	// API routes (must be before static file handler)
 	r.Get("/creategame", handler.CreateGame)
 	r.Get("/ws", handler.ServeWS)
-	r.Get("/daily", dailyHandler.GetChallenge)
-	r.Post("/daily/submit", dailyHandler.Submit)
-	r.Get("/daily/leaderboard", dailyHandler.Leaderboard)
+	// Daily endpoints live under /api so they never shadow the SPA's
+	// /daily page route (a browser refresh on /daily must get index.html).
+	r.Get("/api/daily", dailyHandler.GetChallenge)
+	r.Post("/api/daily/submit", dailyHandler.Submit)
+	r.Get("/api/daily/leaderboard", dailyHandler.Leaderboard)
 
 	// Serve static files
 	staticDir := "./static"
