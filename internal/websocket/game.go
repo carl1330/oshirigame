@@ -243,8 +243,21 @@ func (g *game) StartRound() {
 		return // Round cancelled
 	}
 
+	// The client scroller decelerates for ~0.5s after the letter event lands;
+	// hold the round start until it has visibly settled.
+	letterTimer.Reset(1 * time.Second)
+	select {
+	case <-letterTimer.C:
+	case <-ctx.Done():
+		return // Round cancelled
+	}
+
 	data := g.MarsalGameState()
 	g.BroadcastMessage(ROUND_START, data)
+
+	// Ticks buffered during the letter reveal would instantly eat the first
+	// countdown second — restart the ticker now that the round is live.
+	roundTicker.Reset(1 * time.Second)
 
 	// Round timer with cancellation support
 	for i := g.GameState.RoundTime; i > 0; i-- {

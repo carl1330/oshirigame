@@ -7,7 +7,7 @@ import tickSoundFile from "../../public/sounds/rollover5.ogg";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SPIN_DELAY_MS = 50;
 // Keep the full decelerate-and-land sequence around half a second: the
-// server starts the round right after the last letter event, so a long
+// server starts the round ~1s after the last letter event, so a longer
 // tail would roll into live play.
 const DECEL_START_DELAY_MS = 60;
 const DECEL_FACTOR = 1.3;

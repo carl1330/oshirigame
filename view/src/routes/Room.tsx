@@ -228,6 +228,9 @@ export default function Room() {
   const [gamePropsOpen, setGamePropsOpen] = useState(false);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  // GAME_OVER arrives right after the last ROUND_FINISHED — hold the winner
+  // screen so players can look at the final round's results first
+  const [gameOverPending, setGameOverPending] = useState(false);
   const [winners, setWinners] = useState<PlayerRanking[]>([]);
   const [allWords, setAllWords] = useState<AllWordsResponse | null>(null);
   const [playerWords, setPlayerWords] = useState<PlayerWordResult[]>([]);
@@ -351,6 +354,7 @@ export default function Room() {
         // If game was reset to lobby (not started), clear all game-specific state
         if (!gameState.started) {
           setGameOver(false);
+          setGameOverPending(false);
           setWinners([]);
           setRoundOver(false);
           setPlayerInput("");
@@ -447,8 +451,14 @@ export default function Room() {
       }
       case EventGameOver: {
         const gameOverData = event.data as GameOverResponse;
-        setGameOver(true);
         setWinners(gameOverData.winners);
+        if (roundOver) {
+          // Let everyone see the last round's play first; a button reveals
+          // the winner screen
+          setGameOverPending(true);
+        } else {
+          setGameOver(true);
+        }
         break;
       }
       case Error: {
@@ -617,6 +627,7 @@ export default function Room() {
     if (gameId && player?.isHost) {
       // Reset game state locally
       setGameOver(false);
+      setGameOverPending(false);
       setWinners([]);
       setRoundOver(false);
       setPlayerInput("");
@@ -945,7 +956,15 @@ export default function Room() {
                 </button>
               </div>
             )}
-            {roundOver && player.isHost ? (
+            {roundOver && gameOverPending ? (
+              // Final round: everyone reveals the winner screen at their own pace
+              <Button
+                onClick={() => setGameOver(true)}
+                className="w-full max-w-xs py-3"
+              >
+                Show final results
+              </Button>
+            ) : roundOver && player.isHost ? (
               <Button onClick={handleStartRound} className="w-full max-w-xs py-3">Next round</Button>
             ) : (
               <p className="text-white text-center text-sm px-4">
