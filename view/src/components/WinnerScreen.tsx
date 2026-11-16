@@ -9,6 +9,8 @@ export interface PlayerRanking {
   avatar?: string;
   score: number;
   rank: number;
+  /** Pre-formatted survival story shown instead of points (battle royale) */
+  stat?: string;
 }
 
 // One end-of-game superlative, computed server-side. Value is pre-formatted:
@@ -51,6 +53,21 @@ const AWARD_META: Record<
   swing_miss: {
     title: "Swing and a Miss",
     subtitle: "Most words rejected",
+    tile: "tile-fail",
+  },
+  untouchable: {
+    title: "Untouchable",
+    subtitle: "Won without losing a single life",
+    tile: "tile-anchor",
+  },
+  overachiever: {
+    title: "Overachiever",
+    subtitle: "Crushed the chain's required length",
+    tile: "tile-success",
+  },
+  clutch: {
+    title: "Clutch Player",
+    subtitle: "Turns survived on their last life",
     tile: "tile-fail",
   },
 };
@@ -170,13 +187,13 @@ function PodiumColumn(props: {
           {player.username}
         </p>
         <p
-          className={
+          className={`text-center max-w-[110px] sm:max-w-[140px] ${
             place === 1
               ? "text-violet-300 font-bold text-sm sm:text-base"
               : "text-white/70 text-xs sm:text-sm"
-          }
+          }`}
         >
-          {player.score} pts
+          {player.stat ?? `${player.score} pts`}
         </p>
       </motion.div>
       <motion.div
@@ -327,9 +344,15 @@ export default function WinnerScreen(props: WinnerScreenProps) {
                     {winner.username}
                   </p>
                 </div>
-                <p className="text-white text-base sm:text-lg font-bold flex-shrink-0">
-                  {winner.score}
-                </p>
+                {winner.stat ? (
+                  <p className="text-white/70 text-xs sm:text-sm flex-shrink-0 text-right">
+                    {winner.stat}
+                  </p>
+                ) : (
+                  <p className="text-white text-base sm:text-lg font-bold flex-shrink-0">
+                    {winner.score}
+                  </p>
+                )}
               </div>
             ))}
           </div>

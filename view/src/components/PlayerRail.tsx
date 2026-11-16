@@ -7,21 +7,35 @@ export interface RailPlayer {
   avatar: string;
   score: number;
   isHost: boolean;
+  /** Battle royale: remaining lives */
+  lives?: number;
+  /** Battle royale: knocked out of the game */
+  eliminated?: boolean;
 }
 
 interface PlayerRailProps {
   players: RailPlayer[];
   /** Username of the player whose turn it is (ringed + highlighted) */
   currentUsername?: string;
+  /** Battle royale: show lives instead of score */
+  showLives?: boolean;
 }
 
 /** Avatars shown before collapsing the rest into a "+N" chip */
 const MAX_VISIBLE = 5;
 
+function playerTitle(p: RailPlayer, showLives?: boolean) {
+  if (!showLives) return `${p.username} — ${p.score} pts`;
+  return p.eliminated
+    ? `${p.username} — eliminated`
+    : `${p.username} — ${p.lives ?? 0} ${p.lives === 1 ? "life" : "lives"}`;
+}
+
 /**
  * In-game player rail: big avatar circles in queue order, current player
  * ringed, host labeled, score as a corner chip. Shares layoutIds with
  * PlayerStage so the lobby avatars fly into their rail slots on game start.
+ * In battle royale the chip shows hearts, and eliminated players gray out.
  */
 export default function PlayerRail(props: PlayerRailProps) {
   const visible = props.players.slice(0, MAX_VISIBLE);
@@ -36,10 +50,12 @@ export default function PlayerRail(props: PlayerRailProps) {
             key={p.username}
             layoutId={`player-${p.username}`}
             transition={{ ...MORPH, delay: i * 0.07 }}
-            title={`${p.username} — ${p.score} pts`}
+            title={playerTitle(p, props.showLives)}
             className={`relative flex-none rounded-full ${
               current
                 ? "ring-[3px] ring-violet-300 ring-offset-2 ring-offset-surface shadow-[0_0_24px_rgba(139,92,246,0.6)]"
+                : p.eliminated
+                ? "opacity-40 grayscale"
                 : "opacity-80"
             }`}
           >
@@ -49,18 +65,37 @@ export default function PlayerRail(props: PlayerRailProps) {
                 HOST
               </span>
             )}
-            <span
-              className="absolute -bottom-0.5 -right-0.5 min-w-[22px] px-1.5 h-[22px] flex items-center justify-center rounded-full bg-surface-sunken border border-white/15 text-white text-xs font-bold tabular-nums"
-              aria-label={`${p.username}: ${p.score} points`}
-            >
-              {p.score}
-            </span>
+            {props.showLives ? (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 min-w-[22px] px-1.5 h-[22px] flex items-center justify-center rounded-full bg-surface-sunken border border-white/15 text-xs font-bold tabular-nums"
+                aria-label={
+                  p.eliminated
+                    ? `${p.username}: eliminated`
+                    : `${p.username}: ${p.lives ?? 0} lives`
+                }
+              >
+                {p.eliminated ? (
+                  <span aria-hidden>💀</span>
+                ) : (
+                  <span className="text-red-400" aria-hidden>
+                    ♥{p.lives ?? 0}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 min-w-[22px] px-1.5 h-[22px] flex items-center justify-center rounded-full bg-surface-sunken border border-white/15 text-white text-xs font-bold tabular-nums"
+                aria-label={`${p.username}: ${p.score} points`}
+              >
+                {p.score}
+              </span>
+            )}
           </motion.div>
         );
       })}
       {hidden.length > 0 && (
         <div
-          title={hidden.map((p) => `${p.username} — ${p.score} pts`).join("\n")}
+          title={hidden.map((p) => playerTitle(p, props.showLives)).join("\n")}
           className="flex-none w-16 h-16 rounded-full bg-surface-sunken border border-white/15 flex items-center justify-center text-white/70 font-display font-bold"
         >
           +{hidden.length}

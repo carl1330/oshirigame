@@ -17,6 +17,8 @@ interface GameOptionsDialogProps {
   currentBannedAtama: string;
   currentBannedOshiri: string;
   currentSubmitOnEnter: boolean;
+  currentLives: number;
+  currentSwapTurns: number;
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
   sendEvent: (eventType: string, payload: Message | null) => void;
@@ -99,6 +101,12 @@ const gameModes = [
     label: "Longest word",
     description: "Everyone writes at once — the longest valid word scores",
   },
+  {
+    value: "royale",
+    label: "Battle royale",
+    description:
+      "Each word must beat the last one's length — fail and lose a life. Last one standing wins!",
+  },
 ];
 
 export default function GameOptionsDialog(props: GameOptionsDialogProps) {
@@ -112,6 +120,8 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
   const [bannedAtama, setBannedAtama] = useState(props.currentBannedAtama);
   const [bannedOshiri, setBannedOshiri] = useState(props.currentBannedOshiri);
   const [submitOnEnter, setSubmitOnEnter] = useState(props.currentSubmitOnEnter);
+  const [lives, setLives] = useState(props.currentLives);
+  const [swapTurns, setSwapTurns] = useState(props.currentSwapTurns);
 
   // Re-sync from live game state each time the dialog opens
   useEffect(() => {
@@ -124,6 +134,8 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
       setBannedAtama(props.currentBannedAtama);
       setBannedOshiri(props.currentBannedOshiri);
       setSubmitOnEnter(props.currentSubmitOnEnter);
+      setLives(props.currentLives);
+      setSwapTurns(props.currentSwapTurns);
     }
   }, [props.isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -144,6 +156,8 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
       bannedAtama: bannedAtama,
       bannedOshiri: bannedOshiri,
       submitOnEnter: submitOnEnter,
+      lives: lives,
+      swapTurns: swapTurns,
     };
     props.sendEvent(EventUpdateGameOptions, newOptions);
     props.setIsOpen(false);
@@ -193,13 +207,36 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
                 ))}
               </div>
             </div>
-            <Stepper
-              label="Rounds"
-              value={maxRounds}
-              min={1}
-              max={10}
-              onChange={setMaxRounds}
-            />
+            {/* Battle royale has no fixed round count — it ends when one
+                player is left standing */}
+            {gameMode !== "royale" && (
+              <Stepper
+                label="Rounds"
+                value={maxRounds}
+                min={1}
+                max={10}
+                onChange={setMaxRounds}
+              />
+            )}
+            {gameMode === "royale" && (
+              <>
+                <Stepper
+                  label="Lives"
+                  value={lives}
+                  min={1}
+                  max={5}
+                  onChange={setLives}
+                />
+                <Stepper
+                  label="New letters every"
+                  value={swapTurns}
+                  min={2}
+                  max={10}
+                  suffix="turns"
+                  onChange={setSwapTurns}
+                />
+              </>
+            )}
             <Stepper
               label="Round time"
               value={roundTime}
@@ -274,7 +311,8 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
               </p>
             </div>
 
-            {gameMode !== "longest" && (
+            {/* Longest word and battle royale always submit on Enter */}
+            {gameMode === "classic" && (
             <button
               type="button"
               role="switch"

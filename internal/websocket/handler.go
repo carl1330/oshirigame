@@ -73,6 +73,8 @@ type GameOptionsUpdateMessage struct {
 	BannedAtama         string
 	BannedOshiri        string
 	SubmitOnEnter       bool
+	Lives               int
+	SwapTurns           int
 }
 
 type AllWordsResponse struct {
@@ -87,6 +89,15 @@ type RoundOverResponse struct {
 	Word         string             `json:"word"`
 	WordAccepted bool               `json:"wordAccepted"`
 	PlayerWords  []PlayerWordResult `json:"playerWords,omitempty"`
+	// Battle royale extras: who played, whether the word was merely too short,
+	// the length it had to reach, and who (if anyone) got knocked out.
+	TurnUsername     string `json:"turnUsername,omitempty"`
+	TooShort         bool   `json:"tooShort,omitempty"`
+	NeededLength     int    `json:"neededLength,omitempty"`
+	EliminatedPlayer string `json:"eliminatedPlayer,omitempty"`
+	// Seconds until the server starts the next turn on its own (0 = it won't,
+	// e.g. the game is ending)
+	AutoNextIn int `json:"autoNextIn,omitempty"`
 }
 
 // PlayerWordResult is one player's outcome in a longest-word round.
@@ -117,6 +128,8 @@ type PlayerRanking struct {
 	Avatar   string `json:"avatar"`
 	Score    int    `json:"score"`
 	Rank     int    `json:"rank"`
+	// Stat replaces the points display when set (battle royale survival story)
+	Stat string `json:"stat,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -368,6 +381,8 @@ func (h *hub) UpdateGameOptions(m *Message, c *client) error {
 	game.SetLanguage(gameOptionsUpdateMessage.Language)
 	game.SetBannedLetters(gameOptionsUpdateMessage.BannedAtama, gameOptionsUpdateMessage.BannedOshiri)
 	game.SetSubmitOnEnter(gameOptionsUpdateMessage.SubmitOnEnter)
+	game.SetLives(gameOptionsUpdateMessage.Lives)
+	game.SetSwapTurns(gameOptionsUpdateMessage.SwapTurns)
 
 	game.BroadcastGameState()
 
@@ -408,7 +423,8 @@ func (h *hub) EndTurn(m *Message, c *client) error {
 		return fmt.Errorf("not this player's turn")
 	}
 
-	if !game.GetSubmitOnEnter() {
+	// Battle royale always submits on Enter — the chain lives on speed
+	if game.GetGameMode() != GameModeRoyale && !game.GetSubmitOnEnter() {
 		return fmt.Errorf("submit on enter is disabled")
 	}
 
@@ -429,6 +445,12 @@ func (h *hub) AllWords(m *Message, c *client) error {
 
 	if !game.GetRoundOver() {
 		return fmt.Errorf("round is not over")
+	}
+
+	// Battle royale keeps the same letters for several turns — revealing the
+	// word list mid-cycle would spoil the turns still to play on it
+	if game.GetGameMode() == GameModeRoyale && !game.ShouldSwapLetters() && !game.RoyaleGameOver() {
+		return fmt.Errorf("letters are still in play")
 	}
 
 	atama, oshiri := game.GetRoundLetters()

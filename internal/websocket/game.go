@@ -34,9 +34,14 @@ type game struct {
 // How long a disconnected player may reconnect before being removed from the game.
 const reconnectGrace = 30 * time.Second
 
+// How long the battle royale turn result stays on screen before the server
+// starts the next turn on its own: ~2s of verdict animation + 4s of reading.
+const royaleNextTurnDelay = 6 * time.Second
+
 const (
 	GameModeClassic = "classic"
 	GameModeLongest = "longest"
+	GameModeRoyale  = "royale"
 )
 
 type GameState struct {
@@ -51,7 +56,14 @@ type GameState struct {
 	BannedAtama      string    `json:"bannedAtama"`
 	BannedOshiri     string    `json:"bannedOshiri"`
 	SubmitOnEnter    bool      `json:"submitOnEnter"`
+	Lives            int       `json:"lives"`     // battle royale: starting lives
+	SwapTurns        int       `json:"swapTurns"` // battle royale: turns per letter combination
+	RequiredLength   int       `json:"requiredLength"`
+	SwapIn           int       `json:"swapIn"` // battle royale: turns left on current letters
 	PlayerQueue      []*Player `json:"playerQueue"`
+	// EliminatedPlayers holds knocked-out battle royale players in elimination
+	// order so they can still be shown (and ranked) after losing their seat.
+	EliminatedPlayers []*Player `json:"eliminatedPlayers"`
 	Input            string    `json:"input"`
 	Atama            string    `json:"atama"`
 	Oshiri           string    `json:"oshiri"`
@@ -69,6 +81,8 @@ type Player struct {
 	Username   string `json:"username"`
 	Avatar     string `json:"avatar"`
 	Score      int    `json:"score"`
+	Lives      int    `json:"lives"`      // battle royale: remaining lives
+	Eliminated bool   `json:"eliminated"` // battle royale: out of the game
 	roundInput string // this player's word in longest-word mode
 	submitted  bool   // locked in their word this round (longest-word mode)
 	stats      playerStats
@@ -85,6 +99,11 @@ type playerStats struct {
 	turns       int
 	fails       int   // turns that produced no accepted word
 	submitMs    int64 // this round's lock-in time (longest mode), -1 = not submitted
+	// Battle royale material
+	outOnTurn     int    // turn the player was eliminated on, 0 = survived
+	clutchTurns   int    // turns survived while on their last life
+	bestOvershoot int    // most letters over the required length in one word
+	overshootWord string // the word that did it
 }
 
 func NewGame() *game {
@@ -115,8 +134,13 @@ func NewGameState() *GameState {
 		Language:         string(oshirigame.English),
 		BannedAtama:      "",
 		BannedOshiri:     "",
-		SubmitOnEnter:    false,
-		PlayerQueue:      make([]*Player, 0),
+		SubmitOnEnter:     false,
+		Lives:             3,
+		SwapTurns:         5,
+		RequiredLength:    0,
+		SwapIn:            0,
+		PlayerQueue:       make([]*Player, 0),
+		EliminatedPlayers: make([]*Player, 0),
 	}
 }
 
@@ -210,6 +234,22 @@ func (g *game) InitializeGame() {
 	g.SetGameStateTime(g.GameState.RoundTime)
 	g.SetGameStateInput("")
 	g.SetRoundOver(false)
+
+	if g.GetGameMode() == GameModeRoyale {
+		g.GameState.Lock()
+		// SwapIn 0 forces fresh letters (with the full reveal) on round one
+		g.GameState.RequiredLength = 0
+		g.GameState.SwapIn = 0
+		g.GameState.EliminatedPlayers = make([]*Player, 0)
+		lives := g.GameState.Lives
+		g.GameState.Unlock()
+		g.Lock()
+		for _, player := range g.players {
+			player.SetLives(lives)
+			player.SetEliminated(false)
+		}
+		g.Unlock()
+	}
 }
 
 func (g *game) StartRound() {
@@ -231,41 +271,64 @@ func (g *game) StartRound() {
 	g.SetGameStateInput("")
 	g.ResetRoundInputs()
 
-	//Generate random letters and check if that combination of letters has more than 400 possible words
-	//If not try again until successful. Capped attempts: banned letters can make the
-	//threshold unreachable, in which case we keep the last picked combination.
-	alphabet, bannedAtama, bannedOshiri := g.GetLetterConfig()
-	for attempts := 0; attempts < 500; attempts++ {
-		g.SetAtama(RandomLetter(alphabet, bannedAtama))
-		g.SetOshiri(RandomLetter(alphabet, bannedOshiri))
-		if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) >= g.GameState.WordCombinations {
-			break
+	// Battle royale keeps the same letters for several turns; only re-roll
+	// (with the full scroller reveal) when the current combination is spent.
+	royale := g.GetGameMode() == GameModeRoyale
+	rollLetters := !royale || g.ShouldSwapLetters()
+
+	if rollLetters {
+		//Generate random letters and check if that combination of letters has more than 400 possible words
+		//If not try again until successful. Capped attempts: banned letters can make the
+		//threshold unreachable, in which case we keep the last picked combination.
+		alphabet, bannedAtama, bannedOshiri := g.GetLetterConfig()
+		for attempts := 0; attempts < 500; attempts++ {
+			g.SetAtama(RandomLetter(alphabet, bannedAtama))
+			g.SetOshiri(RandomLetter(alphabet, bannedOshiri))
+			if g.WordList.WordCount(g.GameState.Atama, g.GameState.Oshiri) >= g.GameState.WordCombinations {
+				break
+			}
 		}
-	}
+		if royale {
+			// Fresh letters restart the chain and the swap countdown
+			g.ResetLetterCycle()
+		}
 
-	// Wait for letter timer or cancellation
-	select {
-	case <-letterTimer.C:
-		g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
-	case <-ctx.Done():
-		return // Round cancelled
-	}
+		// Wait for letter timer or cancellation
+		select {
+		case <-letterTimer.C:
+			g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+g.GameState.Atama+`"}`))
+		case <-ctx.Done():
+			return // Round cancelled
+		}
 
-	letterTimer.Reset(3 * time.Second)
-	select {
-	case <-letterTimer.C:
-		g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
-	case <-ctx.Done():
-		return // Round cancelled
-	}
+		letterTimer.Reset(3 * time.Second)
+		select {
+		case <-letterTimer.C:
+			g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+g.GameState.Oshiri+`"}`))
+		case <-ctx.Done():
+			return // Round cancelled
+		}
 
-	// The client scroller decelerates for ~0.5s after the letter event lands;
-	// hold the round start until it has visibly settled.
-	letterTimer.Reset(1 * time.Second)
-	select {
-	case <-letterTimer.C:
-	case <-ctx.Done():
-		return // Round cancelled
+		// The client scroller decelerates for ~0.5s after the letter event lands;
+		// hold the round start until it has visibly settled.
+		letterTimer.Reset(1 * time.Second)
+		select {
+		case <-letterTimer.C:
+		case <-ctx.Done():
+			return // Round cancelled
+		}
+	} else {
+		// Letters unchanged — stop the client scrollers right away and give
+		// them just enough time to settle before the clock starts.
+		atama, oshiri := g.GetRoundLetters()
+		g.BroadcastMessage(ROUND_ATAMA, json.RawMessage(`{"letter":"`+atama+`"}`))
+		g.BroadcastMessage(ROUND_OSHIRI, json.RawMessage(`{"letter":"`+oshiri+`"}`))
+		letterTimer.Reset(500 * time.Millisecond)
+		select {
+		case <-letterTimer.C:
+		case <-ctx.Done():
+			return // Round cancelled
+		}
 	}
 
 	data := g.MarsalGameState()
@@ -354,6 +417,11 @@ func (g *game) FinishRound() {
 		return
 	}
 
+	if g.GetGameMode() == GameModeRoyale {
+		g.FinishRoyaleRound()
+		return
+	}
+
 	if len(g.players) > 0 {
 		player := g.Dequeue()
 		word := g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri
@@ -400,6 +468,300 @@ func (g *game) FinishRound() {
 		}
 
 	}
+}
+
+// FinishRoyaleRound resolves one battle royale turn: the word must be valid
+// AND longer than the previous word in the chain, or the player loses a life.
+// At zero lives the player is eliminated; the last one standing wins.
+func (g *game) FinishRoyaleRound() {
+	g.GameState.Lock()
+	queueLen := len(g.GameState.PlayerQueue)
+	g.GameState.Unlock()
+	if queueLen == 0 {
+		return
+	}
+
+	player := g.Dequeue()
+	atama, oshiri := g.GetRoundLetters()
+
+	g.GameState.Lock()
+	input := g.GameState.Input
+	needed := g.GameState.RequiredLength
+	turn := g.GameState.Round
+	g.GameState.Unlock()
+
+	word := atama + input + oshiri
+	wordLen := len([]rune(word))
+	valid := input != "" && g.WordList.IsValidWord(word)
+	tooShort := valid && needed > 0 && wordLen < needed
+	accepted := valid && !tooShort
+
+	player.RecordTurn(word, accepted, g.roundElapsedMs())
+
+	livesBefore := player.GetLives()
+	eliminated := false
+	if accepted {
+		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(word))
+		g.SetRequiredLength(wordLen + 1)
+		// Award material: chain overshoot, and turns survived on the last life
+		if needed > 0 {
+			player.RecordOvershoot(word, wordLen-needed)
+		}
+		if livesBefore == 1 {
+			player.RecordClutchTurn()
+		}
+	} else {
+		player.LoseLife()
+		// A miss breaks the chain — the next player starts fresh
+		g.SetRequiredLength(0)
+		eliminated = player.GetLives() <= 0
+	}
+
+	g.GameState.Lock()
+	g.GameState.SwapIn--
+	if eliminated {
+		player.SetEliminated(true)
+		player.SetOutOnTurn(turn)
+		g.GameState.EliminatedPlayers = append(g.GameState.EliminatedPlayers, player)
+		// An eliminated host hands the room to the next player in line
+		if player.IsHost && len(g.GameState.PlayerQueue) > 0 {
+			player.IsHost = false
+			g.GameState.PlayerQueue[0].IsHost = true
+		}
+	}
+	alive := len(g.GameState.PlayerQueue)
+	eliminatedCount := len(g.GameState.EliminatedPlayers)
+	g.GameState.Unlock()
+
+	if !eliminated {
+		g.Enqueue(player)
+		alive++
+	}
+
+	g.SetRoundOver(true)
+	g.IncrementRound()
+
+	// Last one standing wins. A solo game runs until its only player dies.
+	gameEnding := alive == 0 || (alive == 1 && eliminatedCount > 0)
+
+	var roundOverResponse RoundOverResponse
+	// The same letters stay in play for several turns — only reveal the best
+	// words once this combination is spent (or the game is ending). Always a
+	// real slice: a nil one marshals to JSON null and breaks clients reading
+	// topWords.length.
+	if gameEnding || g.ShouldSwapLetters() {
+		roundOverResponse.TopWords = g.WordList.TopWords(atama, oshiri)
+	} else {
+		roundOverResponse.TopWords = []string{}
+	}
+	roundOverResponse.Word = word
+	roundOverResponse.WordAccepted = accepted
+	roundOverResponse.TooShort = tooShort
+	roundOverResponse.NeededLength = needed
+	roundOverResponse.TurnUsername = player.Username
+	if eliminated {
+		roundOverResponse.EliminatedPlayer = player.Username
+	}
+	if !gameEnding {
+		roundOverResponse.AutoNextIn = int(royaleNextTurnDelay / time.Second)
+	}
+	roundOverResponse.GameState = g.MarsalGameState()
+
+	data, _ := json.Marshal(roundOverResponse)
+	g.BroadcastMessage(ROUND_FINISHED, data)
+
+	for _, p := range g.players {
+		g.SendPlayerState(p)
+	}
+
+	if gameEnding {
+		g.EndRoyaleGame()
+	} else {
+		g.scheduleAutoAdvance(royaleNextTurnDelay)
+	}
+}
+
+// scheduleAutoAdvance starts the next battle royale turn after the result has
+// been on screen for a while — no host interaction needed. The round counter
+// is captured so a reset (or anything else that moved the game on) cancels
+// the pending advance.
+func (g *game) scheduleAutoAdvance(delay time.Duration) {
+	g.GameState.Lock()
+	round := g.GameState.Round
+	g.GameState.Unlock()
+
+	go func() {
+		time.Sleep(delay)
+
+		g.GameState.Lock()
+		stillPending := g.GameState.Started &&
+			g.GameState.RoundOver &&
+			g.GameState.GameMode == GameModeRoyale &&
+			g.GameState.Round == round &&
+			len(g.GameState.PlayerQueue) > 0
+		data, _ := json.Marshal(g.GameState)
+		g.GameState.Unlock()
+
+		if !stillPending || g.IsRunning() {
+			return
+		}
+
+		// Mirror the NEXT_ROUND flow the host button used to drive
+		g.BroadcastMessage(NEXT_ROUND, data)
+		g.StartRound()
+	}()
+}
+
+// pick returns a random entry so repeated screens don't always read the same.
+func pick(phrases []string) string {
+	return phrases[rand.Intn(len(phrases))]
+}
+
+var royaleWinnerPhrases = []string{
+	"Last one standing",
+	"Sole survivor",
+	"Outlasted them all",
+	"Still breathing",
+	"The final boss",
+}
+
+var royaleKnockoutPhrases = []string{
+	"Knocked out on turn %d",
+	"Fell on turn %d",
+	"Out of lives on turn %d",
+	"Didn't survive turn %d",
+	"Turn %d claimed them",
+}
+
+// EndRoyaleGame ranks players by survival: the last one standing first, then
+// the eliminated players in reverse elimination order. Each ranking carries a
+// pre-formatted survival stat — battle royale isn't about points.
+func (g *game) EndRoyaleGame() {
+	g.GameState.Lock()
+	startingLives := g.GameState.Lives
+	alive := make([]*Player, len(g.GameState.PlayerQueue))
+	copy(alive, g.GameState.PlayerQueue)
+	ranked := make([]*Player, 0, len(g.GameState.PlayerQueue)+len(g.GameState.EliminatedPlayers))
+	ranked = append(ranked, g.GameState.PlayerQueue...)
+	for i := len(g.GameState.EliminatedPlayers) - 1; i >= 0; i-- {
+		ranked = append(ranked, g.GameState.EliminatedPlayers[i])
+	}
+	g.GameState.Unlock()
+
+	winners := make([]PlayerRanking, 0, len(ranked))
+	for i, player := range ranked {
+		stats := player.GetStats()
+		var stat string
+		if stats.outOnTurn == 0 {
+			stat = fmt.Sprintf("%s · %d♥ left", pick(royaleWinnerPhrases), player.GetLives())
+		} else {
+			stat = fmt.Sprintf(pick(royaleKnockoutPhrases), stats.outOnTurn)
+		}
+		winners = append(winners, PlayerRanking{
+			Username: player.Username,
+			Avatar:   player.Avatar,
+			Score:    player.GetPlayerScore(),
+			Rank:     i + 1,
+			Stat:     stat,
+		})
+	}
+
+	var gameOverResponse GameOverResponse
+	gameOverResponse.Winners = winners
+	gameOverResponse.Awards = append(g.ComputeAwards(), g.computeRoyaleAwards(alive, startingLives)...)
+
+	data, _ := json.Marshal(gameOverResponse)
+	g.BroadcastMessage(GAME_OVER, data)
+}
+
+// computeRoyaleAwards adds the battle-royale-only superlatives on top of the
+// shared ones.
+func (g *game) computeRoyaleAwards(alive []*Player, startingLives int) []Award {
+	awards := make([]Award, 0, 3)
+
+	// Untouchable: won without losing a single life
+	if len(alive) == 1 && alive[0].GetLives() == startingLives {
+		awards = append(awards, Award{
+			Id:       "untouchable",
+			Username: alive[0].Username,
+			Avatar:   alive[0].Avatar,
+			Value:    "FLAWLESS",
+		})
+	}
+
+	g.Lock()
+	players := make([]*Player, 0, len(g.players))
+	for _, player := range g.players {
+		players = append(players, player)
+	}
+	g.Unlock()
+
+	// Overachiever: beat the chain's required length by the most letters
+	var overPlayer *Player
+	bestOver := 0
+	// Clutch Player: most turns survived on the last life
+	var clutchPlayer *Player
+	bestClutch := 0
+	for _, player := range players {
+		stats := player.GetStats()
+		if stats.bestOvershoot > bestOver {
+			bestOver = stats.bestOvershoot
+			overPlayer = player
+		}
+		if stats.clutchTurns > bestClutch {
+			bestClutch = stats.clutchTurns
+			clutchPlayer = player
+		}
+	}
+	if overPlayer != nil {
+		awards = append(awards, Award{
+			Id:       "overachiever",
+			Username: overPlayer.Username,
+			Avatar:   overPlayer.Avatar,
+			Value:    overPlayer.GetStats().overshootWord,
+		})
+	}
+	if clutchPlayer != nil {
+		awards = append(awards, Award{
+			Id:       "clutch",
+			Username: clutchPlayer.Username,
+			Avatar:   clutchPlayer.Avatar,
+			Value:    fmt.Sprintf("%d", bestClutch),
+		})
+	}
+
+	return awards
+}
+
+// RoyaleGameOver reports whether the battle royale has ended: one player (or
+// none, in a solo game) left standing after at least one elimination.
+func (g *game) RoyaleGameOver() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	alive := len(g.GameState.PlayerQueue)
+	return alive == 0 || (alive == 1 && len(g.GameState.EliminatedPlayers) > 0)
+}
+
+// ShouldSwapLetters reports whether the battle royale letter combination is
+// spent and must be re-rolled before the next turn.
+func (g *game) ShouldSwapLetters() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.SwapIn <= 0 || g.GameState.Atama == "" || g.GameState.Oshiri == ""
+}
+
+// ResetLetterCycle restarts the battle royale swap countdown and word chain.
+func (g *game) ResetLetterCycle() {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.SwapIn = g.GameState.SwapTurns
+	g.GameState.RequiredLength = 0
+}
+
+func (g *game) SetRequiredLength(length int) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.RequiredLength = length
 }
 
 // FinishLongestRound scores a longest-word round: every valid word is
@@ -506,7 +868,7 @@ func (g *game) GetGameMode() string {
 
 // SetGameMode switches game mode; ignores unknown modes.
 func (g *game) SetGameMode(mode string) {
-	if mode != GameModeClassic && mode != GameModeLongest {
+	if mode != GameModeClassic && mode != GameModeLongest && mode != GameModeRoyale {
 		return
 	}
 	g.GameState.Lock()
@@ -885,19 +1247,36 @@ func (g *game) ResetToLobby() {
 	g.GameState.Oshiri = ""
 	g.GameState.RoundOver = false
 	g.GameState.TurnCount = 0
+	g.GameState.RequiredLength = 0
+	g.GameState.SwapIn = 0
+	g.GameState.EliminatedPlayers = make([]*Player, 0)
+	// Snapshot who still holds a seat — eliminated battle royale players
+	// were removed from the queue and must get their seat back
+	queued := make(map[string]bool, len(g.GameState.PlayerQueue))
+	for _, player := range g.GameState.PlayerQueue {
+		queued[player.token] = true
+	}
 	g.GameState.Unlock()
 
 	// Reset all player scores but keep them in the game
 	g.Lock()
+	benched := make([]*Player, 0)
 	for _, player := range g.players {
 		player.SetPlayerScore(0)
 		player.ResetStats()
+		player.SetEliminated(false)
 		player.Lock()
 		player.roundInput = ""
 		player.submitted = false
 		player.Unlock()
+		if !queued[player.token] {
+			benched = append(benched, player)
+		}
 	}
 	g.Unlock()
+	for _, player := range benched {
+		g.Enqueue(player)
+	}
 
 	// Broadcast updated game state to all players
 	g.BroadcastGameState()
@@ -918,6 +1297,40 @@ func (g *game) SetWordCombinations(min int) {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	g.GameState.WordCombinations = min
+}
+
+// SetLives sets the battle royale starting lives, clamped to a sane range.
+// Zero means "not provided" and leaves the current value untouched.
+func (g *game) SetLives(lives int) {
+	if lives == 0 {
+		return
+	}
+	if lives < 1 {
+		lives = 1
+	}
+	if lives > 5 {
+		lives = 5
+	}
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Lives = lives
+}
+
+// SetSwapTurns sets how many battle royale turns a letter combination lasts.
+// Zero means "not provided" and leaves the current value untouched.
+func (g *game) SetSwapTurns(turns int) {
+	if turns == 0 {
+		return
+	}
+	if turns < 2 {
+		turns = 2
+	}
+	if turns > 10 {
+		turns = 10
+	}
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.SwapTurns = turns
 }
 
 func (g *game) SetRoundTime(time int) {
@@ -949,6 +1362,55 @@ func (g *game) GetRoundLetters() (string, string) {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	return g.GameState.Atama, g.GameState.Oshiri
+}
+
+// RecordOvershoot keeps the single biggest beat-the-chain margin of the game.
+func (p *Player) RecordOvershoot(word string, over int) {
+	p.Lock()
+	defer p.Unlock()
+	if over > p.stats.bestOvershoot {
+		p.stats.bestOvershoot = over
+		p.stats.overshootWord = word
+	}
+}
+
+// RecordClutchTurn counts a turn survived while on the last life.
+func (p *Player) RecordClutchTurn() {
+	p.Lock()
+	defer p.Unlock()
+	p.stats.clutchTurns++
+}
+
+func (p *Player) SetOutOnTurn(turn int) {
+	p.Lock()
+	defer p.Unlock()
+	p.stats.outOnTurn = turn
+}
+
+func (p *Player) SetLives(lives int) {
+	p.Lock()
+	defer p.Unlock()
+	p.Lives = lives
+}
+
+func (p *Player) GetLives() int {
+	p.Lock()
+	defer p.Unlock()
+	return p.Lives
+}
+
+func (p *Player) LoseLife() {
+	p.Lock()
+	defer p.Unlock()
+	if p.Lives > 0 {
+		p.Lives--
+	}
+}
+
+func (p *Player) SetEliminated(eliminated bool) {
+	p.Lock()
+	defer p.Unlock()
+	p.Eliminated = eliminated
 }
 
 func (p *Player) SetPlayerScore(score int) {

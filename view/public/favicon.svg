@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Oshirigame icon: the letter O on a violet keycap tile, matching the
+       in-game .tile-anchor style (lit top edge + dark drop edge = depth) -->
+  <defs>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#5b21b6"/>
+    </linearGradient>
+  </defs>
+  <!-- drop edge -->
+  <rect x="4" y="10" width="56" height="52" rx="12" fill="#3b1577"/>
+  <!-- keycap face -->
+  <rect x="4" y="4" width="56" height="52" rx="12" fill="url(#cap)"/>
+  <!-- lit top edge -->
+  <rect x="4" y="4" width="56" height="52" rx="12" fill="none"
+        stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+  <!-- the O, drawn as a ring so it needs no font -->
+  <circle cx="32" cy="30" r="13.5" fill="none" stroke="rgba(0,0,0,0.35)"
+          stroke-width="8" transform="translate(0 1.5)"/>
+  <circle cx="32" cy="30" r="13.5" fill="none" stroke="#ffffff" stroke-width="8"/>
+</svg>

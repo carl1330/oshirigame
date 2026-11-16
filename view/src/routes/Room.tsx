@@ -16,6 +16,7 @@ import { MORPH, BEAT } from "../misc/motion";
 import RoomCodeMarquee from "../components/RoomCodeMarquee";
 import PlayerStage from "../components/PlayerStage";
 import PlayerRail from "../components/PlayerRail";
+import PlayerCircle from "../components/PlayerCircle";
 import { FaCog, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
 import GameOptionsDialog from "../components/GameOptionsDialog";
@@ -49,6 +50,16 @@ export type GameState = {
   oshiri: string;
   roundOver: boolean;
   submitOnEnter: boolean;
+  /** Battle royale: starting lives */
+  lives: number;
+  /** Battle royale: turns per letter combination */
+  swapTurns: number;
+  /** Battle royale: minimum letters the next word must have (0 = any) */
+  requiredLength: number;
+  /** Battle royale: turns left before the letters swap */
+  swapIn: number;
+  /** Battle royale: knocked-out players, in elimination order */
+  eliminatedPlayers: Player[] | null;
 };
 
 type Player = {
@@ -61,6 +72,10 @@ type Player = {
   isLeader: boolean;
   /** Stable room admin — controls options, starting and round flow */
   isHost: boolean;
+  /** Battle royale: remaining lives */
+  lives: number;
+  /** Battle royale: knocked out of the game */
+  eliminated: boolean;
 };
 
 interface JoinGameMessage {
@@ -96,6 +111,8 @@ export interface GameOptionsEvent {
   bannedAtama: string;
   bannedOshiri: string;
   submitOnEnter: boolean;
+  lives: number;
+  swapTurns: number;
 }
 
 interface AllWordsResponse {
@@ -118,7 +135,65 @@ interface RoundOverResponse {
   wordAccepted: boolean;
   word: string;
   playerWords?: PlayerWordResult[];
+  /** Battle royale: who played the turn */
+  turnUsername?: string;
+  /** Battle royale: valid word, but shorter than the chain required */
+  tooShort?: boolean;
+  /** Battle royale: length the word had to reach */
+  neededLength?: number;
+  /** Battle royale: player knocked out this turn */
+  eliminatedPlayer?: string;
+  /** Battle royale: seconds until the server auto-starts the next turn */
+  autoNextIn?: number;
 }
+
+/** Battle royale turn outcome kept around for the round-over screen */
+interface RoyaleResult {
+  turnUsername: string;
+  accepted: boolean;
+  tooShort: boolean;
+  neededLength: number;
+  eliminatedPlayer?: string;
+  /** Random seed fixed per result so the phrasing varies turn to turn but
+      stays stable across re-renders */
+  seed: number;
+}
+
+/** Pick one phrase from a pool using the result's fixed seed */
+function vary(pool: string[], seed: number): string {
+  return pool[Math.floor(seed * pool.length) % pool.length];
+}
+
+const CHAIN_ALIVE_PHRASES = [
+  "keeps the chain alive!",
+  "raises the bar!",
+  "keeps it rolling!",
+  "delivers under pressure!",
+  "stays in the fight!",
+];
+const NOT_A_WORD_PHRASES = [
+  "Not a valid word",
+  "That's not a word…",
+  "The dictionary disagrees",
+  "No such word!",
+];
+const LOSE_LIFE_PHRASES = [
+  "loses a life",
+  "drops a life",
+  "burns a life",
+  "is down a life",
+];
+const ELIMINATED_PHRASES = [
+  "has been eliminated!",
+  "is out of the game!",
+  "is down and out!",
+  "won't be coming back!",
+];
+const tooShortPhrases = (n: number) => [
+  `Too short — the chain needed ${n} letters`,
+  `Needed ${n} letters — that fell short`,
+  `Shy of the ${n}-letter bar`,
+];
 
 interface GameOverResponse {
   winners: PlayerRanking[];
@@ -160,12 +235,22 @@ export const Error = "ERROR";
 
 /** Read-only summary of the room settings so every player knows the rules */
 function SettingsSummary({ gameState }: { gameState: GameState }) {
+  const isRoyale = gameState.gameMode === "royale";
   const items = [
-    gameState.gameMode === "longest" ? "Longest word" : "Classic",
-    `${gameState.maxRounds} rounds`,
+    isRoyale
+      ? "Battle royale"
+      : gameState.gameMode === "longest"
+      ? "Longest word"
+      : "Classic",
+    isRoyale
+      ? `${gameState.lives} ${gameState.lives === 1 ? "life" : "lives"}`
+      : `${gameState.maxRounds} rounds`,
     `${gameState.roundTime}s timer`,
     gameState.language === "swedish" ? "Svenska" : "English",
   ];
+  if (isRoyale) {
+    items.push(`New letters every ${gameState.swapTurns} turns`);
+  }
   if (gameState.bannedAtama) {
     items.push(`Never starts with ${gameState.bannedAtama.toUpperCase()}`);
   }
@@ -239,6 +324,9 @@ export default function Room() {
   const [awards, setAwards] = useState<Award[]>([]);
   const [allWords, setAllWords] = useState<AllWordsResponse | null>(null);
   const [playerWords, setPlayerWords] = useState<PlayerWordResult[]>([]);
+  const [royaleResult, setRoyaleResult] = useState<RoyaleResult | null>(null);
+  // Battle royale: when the server will auto-start the next turn (epoch ms)
+  const [autoNextAt, setAutoNextAt] = useState<number | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [wordListOpen, setWordListOpen] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -264,6 +352,18 @@ export default function Room() {
     const timeout = window.setTimeout(() => setEntering(false), 2200);
     return () => window.clearTimeout(timeout);
   }, [entering]);
+
+  // Ticks four times a second while an auto-advance countdown is live, so the
+  // "Next turn in N…" label stays current
+  const [, setCountdownTick] = useState(0);
+  useEffect(() => {
+    if (!autoNextAt) return;
+    const id = window.setInterval(() => setCountdownTick((t) => t + 1), 250);
+    return () => window.clearInterval(id);
+  }, [autoNextAt]);
+  const nextTurnIn = autoNextAt
+    ? Math.max(0, Math.ceil((autoNextAt - Date.now()) / 1000))
+    : null;
 
   // Two-phase round-over reveal: first the word verdict plays out (tiles
   // popping green/red), then — once it has finished and had a beat to be
@@ -426,6 +526,8 @@ export default function Room() {
           setAllWords(null);
           setWordListOpen(false);
           setPlayerWords([]);
+          setRoyaleResult(null);
+          setAutoNextAt(null);
           setHasSubmitted(false);
         }
 
@@ -467,6 +569,12 @@ export default function Room() {
           setHasSubmitted(false);
           setPlayerWords([]);
         }
+        if (nextState.gameMode === "royale") {
+          setPlayerInput("");
+          setHasSubmitted(false);
+          setRoyaleResult(null);
+          setAutoNextAt(null);
+        }
         break;
       }
       case EventRoundFinished: {
@@ -475,11 +583,28 @@ export default function Room() {
           gameStateFinished.gameState.roundTime;
         roundOverRef.current = true;
         setRoundOver(true);
-        setTopWords(gameStateFinished.topWords);
+        // Defensive ?? []: the server omits topWords while royale letters
+        // are still in play, and null.length takes down the whole tree
+        setTopWords(gameStateFinished.topWords ?? []);
         setGameState(gameStateFinished.gameState);
         setFinishedWord(gameStateFinished.word.toLocaleUpperCase());
         setWordAccepted(gameStateFinished.wordAccepted);
         setPlayerWords(gameStateFinished.playerWords ?? []);
+        if (gameStateFinished.gameState.gameMode === "royale") {
+          setRoyaleResult({
+            turnUsername: gameStateFinished.turnUsername ?? "",
+            accepted: gameStateFinished.wordAccepted,
+            tooShort: gameStateFinished.tooShort ?? false,
+            neededLength: gameStateFinished.neededLength ?? 0,
+            eliminatedPlayer: gameStateFinished.eliminatedPlayer,
+            seed: Math.random(),
+          });
+          setAutoNextAt(
+            gameStateFinished.autoNextIn
+              ? Date.now() + gameStateFinished.autoNextIn * 1000
+              : null
+          );
+        }
         setHasSubmitted(false);
         setInputUsername("");
         setFocus(false);
@@ -671,6 +796,19 @@ export default function Room() {
   }
 
   const isLongest = gameState.gameMode === "longest";
+  const isRoyale = gameState.gameMode === "royale";
+  // Battle royale rail: alive players in turn order, then the knocked-out
+  // ghosts in elimination order
+  const railPlayers = isRoyale
+    ? [
+        ...gameState.playerQueue,
+        ...(gameState.eliminatedPlayers ?? []).map((p) => ({
+          ...p,
+          eliminated: true,
+        })),
+      ]
+    : gameState.playerQueue;
+  const aliveCount = gameState.playerQueue.length;
   // In longest mode the round-over verdict animation plays on your own word
   const ownResult = isLongest
     ? playerWords.find((r) => r.username === player.username)
@@ -697,6 +835,7 @@ export default function Room() {
       setOshiriActive(true);
       setRoundOver(false);
       setPlayerWords([]);
+      setRoyaleResult(null);
       setHasSubmitted(false);
       sendEvent(EventNextRound, null);
     }
@@ -718,6 +857,8 @@ export default function Room() {
       setWordAccepted(false);
       setTopWords([]);
       setPlayerWords([]);
+      setRoyaleResult(null);
+      setAutoNextAt(null);
       setHasSubmitted(false);
 
       // Send reset event to backend
@@ -782,25 +923,35 @@ export default function Room() {
           >
             {/* Top bar: player rail · round header · controls */}
             <div className="absolute top-0 inset-x-0 z-10 flex items-center gap-2 sm:gap-4 p-2 sm:p-4">
-              <div className="flex-none pl-1 pt-1">
-                <PlayerRail
-                  players={gameState.playerQueue}
-                  currentUsername={
-                    !isLongest && !roundOver && gameState.playerQueue.length > 0
-                      ? gameState.playerQueue[0].username
-                      : undefined
-                  }
-                />
-              </div>
+              {/* Battle royale seats players in a circle instead of the rail */}
+              {!isRoyale && (
+                <div className="flex-none pl-1 pt-1">
+                  <PlayerRail
+                    players={railPlayers}
+                    currentUsername={
+                      !isLongest &&
+                      !roundOver &&
+                      gameState.playerQueue.length > 0
+                        ? gameState.playerQueue[0].username
+                        : undefined
+                    }
+                  />
+                </div>
+              )}
               <motion.h1
                 initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: BEAT.roundHeader }}
                 className="flex-1 min-w-0 truncate text-center text-white font-display font-semibold text-sm sm:text-lg md:text-xl"
               >
-                Round {gameState.round}/{gameState.maxRounds} —{" "}
+                {isRoyale
+                  ? `Turn ${gameState.round} · ${aliveCount} left`
+                  : `Round ${gameState.round}/${gameState.maxRounds}`}{" "}
+                —{" "}
                 {roundOver
-                  ? "Round over"
+                  ? isRoyale
+                    ? "Turn over"
+                    : "Round over"
                   : isLongest
                   ? "Longest word wins!"
                   : gameState.playerQueue.length > 0
@@ -835,6 +986,26 @@ export default function Room() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Battle royale: players ring the play area, current player's
+                seat at bottom center. The queue head is always highlighted —
+                during the result display the ring already rotates to preview
+                who's up next. pointer-events-none keeps the layer — which
+                sits above the static content column — from swallowing clicks
+                on the input tiles; seats re-enable their own pointer events
+                for tooltips. */}
+            {isRoyale && (
+              <div className="absolute inset-x-3 top-20 bottom-3 sm:inset-x-10 sm:top-24 sm:bottom-8 z-0 pointer-events-none">
+                <PlayerCircle
+                  players={railPlayers}
+                  currentUsername={
+                    gameState.playerQueue.length > 0
+                      ? gameState.playerQueue[0].username
+                      : undefined
+                  }
+                />
+              </div>
+            )}
 
             {/* Scrollable content area: centers when it fits the browser
                 height, scrolls under the fixed top bar when it doesn't */}
@@ -887,7 +1058,30 @@ export default function Room() {
                     }}
                   />
                 </motion.div>
-                {isLongest ? (
+                {isRoyale ? (
+                  <motion.div
+                    initial={settleInitial}
+                    animate={settleAnimate}
+                    transition={settleTransition}
+                    className="flex flex-col items-center gap-1 text-center"
+                  >
+                    <p className="text-white font-display font-semibold text-sm sm:text-base">
+                      {gameState.requiredLength > 0
+                        ? `Beat the chain — at least ${gameState.requiredLength} letters`
+                        : "Any valid word starts the chain"}
+                    </p>
+                    <p className="text-white/60 text-sm">
+                      {player.isLeader && "Press ↵ Enter to submit · "}
+                      New letters in {gameState.swapIn}{" "}
+                      {gameState.swapIn === 1 ? "turn" : "turns"}
+                    </p>
+                    {player.eliminated && (
+                      <p className="text-white/40 text-sm">
+                        💀 You're out — spectating
+                      </p>
+                    )}
+                  </motion.div>
+                ) : isLongest ? (
                   <motion.p
                     initial={settleInitial}
                     animate={settleAnimate}
@@ -935,7 +1129,7 @@ export default function Room() {
                       onEnter={
                         isLongest
                           ? handleSubmitWord
-                          : gameState.submitOnEnter
+                          : isRoyale || gameState.submitOnEnter
                           ? () => sendEvent(EventEndTurn, null)
                           : undefined
                       }
@@ -998,6 +1192,52 @@ export default function Room() {
                   }
                   wordAccepted={isLongest ? ownResult!.accepted : wordAccepted}
                 />
+              </motion.div>
+            )}
+            {/* Battle royale verdict: chain status, lost lives, eliminations */}
+            {isRoyale && verdictShown && royaleResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="flex flex-col items-center gap-2 text-center max-w-md px-2"
+              >
+                {royaleResult.accepted ? (
+                  <p className="text-white font-display font-semibold">
+                    {royaleResult.turnUsername}{" "}
+                    {vary(CHAIN_ALIVE_PHRASES, royaleResult.seed)} Next word
+                    needs at least {gameState.requiredLength} letters.
+                  </p>
+                ) : (
+                  <div className="flex flex-col items-center gap-1 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/40">
+                    <p className="text-red-300 font-display font-semibold">
+                      {royaleResult.tooShort
+                        ? vary(
+                            tooShortPhrases(royaleResult.neededLength),
+                            royaleResult.seed
+                          )
+                        : vary(NOT_A_WORD_PHRASES, royaleResult.seed)}
+                    </p>
+                    <p className="text-white/80 text-sm">
+                      {royaleResult.turnUsername}{" "}
+                      {vary(LOSE_LIFE_PHRASES, royaleResult.seed)}{" "}
+                      <span className="text-red-400" aria-hidden>
+                        ♥
+                      </span>
+                    </p>
+                    {royaleResult.eliminatedPlayer && (
+                      <p className="text-white font-display font-bold">
+                        💀 {royaleResult.eliminatedPlayer}{" "}
+                        {vary(ELIMINATED_PHRASES, royaleResult.seed)}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {gameState.swapIn <= 0 && !gameOverPending && (
+                  <p className="text-violet-300 text-sm font-semibold">
+                    New letters coming up!
+                  </p>
+                )}
               </motion.div>
             )}
             {/* Longest-word mode results: everyone's word side by side —
@@ -1106,8 +1346,17 @@ export default function Room() {
                 >
                   Show final results
                 </Button>
+              ) : isRoyale ? (
+                // The server starts the next turn on its own
+                <p className="text-white/60 text-center text-sm px-4 tabular-nums">
+                  {nextTurnIn !== null && nextTurnIn > 0
+                    ? `Next turn in ${nextTurnIn}…`
+                    : "Next turn starting…"}
+                </p>
               ) : player.isHost ? (
-                <Button onClick={handleStartRound} className="w-full max-w-xs py-3">Next round</Button>
+                <Button onClick={handleStartRound} className="w-full max-w-xs py-3">
+                  Next round
+                </Button>
               ) : (
                 <p className="text-white text-center text-sm px-4">
                   Waiting for {hostName} to start next round
@@ -1179,6 +1428,8 @@ export default function Room() {
                     currentBannedAtama={gameState.bannedAtama}
                     currentBannedOshiri={gameState.bannedOshiri}
                     currentSubmitOnEnter={gameState.submitOnEnter}
+                    currentLives={gameState.lives}
+                    currentSwapTurns={gameState.swapTurns}
                     isOpen={gamePropsOpen}
                     setIsOpen={setGamePropsOpen}
                     sendEvent={sendEvent}

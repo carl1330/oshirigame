@@ -81,9 +81,6 @@ export default function Home() {
                 </motion.div>
               ))}
             </div>
-            <p className="text-white/60 text-base sm:text-lg text-center max-w-sm">
-              The last-letter word game. Race the clock, chain the words.
-            </p>
             <Button
               className="flex items-center justify-center gap-3 px-8"
               onClick={handleCreateRoom}
