@@ -222,6 +222,9 @@ export default function Room() {
   const [atama, setAtama] = useState("");
   const [oshiri, setOshiri] = useState("");
   const [roundOver, setRoundOver] = useState(false);
+  // Mirrors roundOver for the message handler: GAME_OVER often arrives in the
+  // same drain pass as ROUND_FINISHED, before the state update has rendered
+  const roundOverRef = useRef(false);
   const [playerInput, setPlayerInput] = useState("");
   const [finishedWord, setFinishedWord] = useState<string>("");
   const [wordAccepted, setWordAccepted] = useState<boolean>(false);
@@ -290,7 +293,15 @@ export default function Room() {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }, [token]);
 
-  const { sendMessage, lastMessage } = useWebSocket(wsUrl, {
+  // Every incoming message is queued and processed in order. Reading only
+  // react-use-websocket's lastMessage drops messages when the server sends
+  // several in one tick (ROUND_FINISHED + GAME_OVER on the final round):
+  // React batches the updates and the effect only ever sees the last one.
+  const [messageQueue, setMessageQueue] = useState<string[]>([]);
+
+  const { sendMessage } = useWebSocket(wsUrl, {
+    onMessage: (message) =>
+      setMessageQueue((queue) => [...queue, message.data as string]),
     shouldReconnect: () => !leavingRef.current,
     reconnectAttempts: 10,
     reconnectInterval: (attempt) => Math.min(500 * 2 ** attempt, 5000),
@@ -331,10 +342,17 @@ export default function Room() {
   }
 
   useEffect(() => {
-    if (lastMessage === null) {
+    if (messageQueue.length === 0) {
       return;
     }
-    const event: Event = JSON.parse(lastMessage.data);
+    for (const raw of messageQueue) {
+      handleServerEvent(JSON.parse(raw));
+    }
+    setMessageQueue([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageQueue]);
+
+  function handleServerEvent(event: Event) {
     switch (event.type) {
       case EventNewClient: {
         console.log("new client");
@@ -358,6 +376,7 @@ export default function Room() {
           setGameOver(false);
           setGameOverPending(false);
           setWinners([]);
+          roundOverRef.current = false;
           setRoundOver(false);
           setPlayerInput("");
           setAtamaActive(false);
@@ -401,6 +420,7 @@ export default function Room() {
       case EventNextRound: {
         // Broadcast to every client (leader included) — spin both scrollers
         const nextState = event.data as GameState;
+        roundOverRef.current = false;
         setRoundOver(false);
         setAtamaActive(true);
         setOshiriActive(true);
@@ -416,6 +436,7 @@ export default function Room() {
         const gameStateFinished = event.data as RoundOverResponse;
         gameStateFinished.gameState.time =
           gameStateFinished.gameState.roundTime;
+        roundOverRef.current = true;
         setRoundOver(true);
         setTopWords(gameStateFinished.topWords);
         setGameState(gameStateFinished.gameState);
@@ -455,7 +476,7 @@ export default function Room() {
         const gameOverData = event.data as GameOverResponse;
         setWinners(gameOverData.winners);
         setAwards(gameOverData.awards ?? []);
-        if (roundOver) {
+        if (roundOverRef.current) {
           // Let everyone see the last round's play first; a button reveals
           // the winner screen
           setGameOverPending(true);
@@ -471,7 +492,7 @@ export default function Room() {
         navigate("/");
       }
     }
-  }, [lastMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   useEffect(() => {
     if (player && gameId) {
