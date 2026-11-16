@@ -100,6 +100,16 @@ type PlayerWordResult struct {
 
 type GameOverResponse struct {
 	Winners []PlayerRanking `json:"winners"`
+	Awards  []Award         `json:"awards"`
+}
+
+// Award is one end-of-game superlative ("longest word", "fastest answer"...).
+// Value is pre-formatted: the word itself, "3.2s", or a count.
+type Award struct {
+	Id       string `json:"id"`
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+	Value    string `json:"value"`
 }
 
 type PlayerRanking struct {
@@ -386,6 +396,7 @@ func (h *hub) EndTurn(m *Message, c *client) error {
 	// Longest-word mode: Enter locks in this player's word; the round ends
 	// early once everyone has locked in.
 	if game.GetGameMode() == GameModeLongest {
+		player.SetSubmitMs(game.roundElapsedMs())
 		player.SetSubmitted(true)
 		if game.AllSubmitted() {
 			game.EndTurnEarly()

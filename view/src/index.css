@@ -128,6 +128,82 @@ body {
     box-shadow: 0 4px 0 #7f1d1d, 0 6px 16px rgba(239, 68, 68, 0.35),
       inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
+
+  /* Keycap button: the letter-tile physics applied to pressable controls.
+     The 4px drop edge collapses on press — same depth trick as .tile. */
+  .keycap-btn {
+    @apply flex items-center justify-center rounded-xl font-display
+      font-semibold text-white select-none;
+    background: linear-gradient(180deg, #343447 0%, #262636 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 0 #15151f, 0 6px 12px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+  }
+  .keycap-btn:hover:not(:disabled) {
+    filter: brightness(1.15);
+  }
+  .keycap-btn:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 #15151f, 0 2px 6px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  .keycap-btn:disabled {
+    opacity: 0.3;
+  }
+  /* Selected state borrows the purple anchor tile */
+  .keycap-btn-active {
+    background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 100%);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 4px 0 #3b1577, 0 6px 16px rgba(124, 58, 237, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .keycap-btn-active:active:not(:disabled) {
+    box-shadow: 0 0 0 #3b1577, 0 2px 8px rgba(124, 58, 237, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  /* Full-screen pause takeover (GameMenu) */
+  .pause-backdrop {
+    @apply fixed inset-0 z-50;
+    background: radial-gradient(
+        ellipse 100% 70% at 50% 0%,
+        rgba(139, 92, 246, 0.22),
+        transparent
+      ),
+      rgba(8, 8, 14, 0.9);
+    backdrop-filter: blur(10px);
+  }
+
+  .pause-opt {
+    @apply flex items-center gap-3 sm:gap-4 text-left font-display
+      font-semibold select-none cursor-pointer;
+    color: rgba(255, 255, 255, 0.45);
+    transition: color 0.15s ease, transform 0.15s ease;
+  }
+  .pause-opt:hover,
+  .pause-opt:focus-visible {
+    color: #fff;
+    transform: translateX(8px);
+  }
+  .pause-opt-danger:hover,
+  .pause-opt-danger:focus-visible {
+    color: #fca5a5;
+  }
+  /* The letter-tile bullet lights up like an anchor tile on hover */
+  .pause-opt:hover .pause-key,
+  .pause-opt:focus-visible .pause-key {
+    background: linear-gradient(180deg, #7c3aed 0%, #5b21b6 100%);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 4px 0 #3b1577, 0 6px 16px rgba(124, 58, 237, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .pause-opt-danger:hover .pause-key,
+  .pause-opt-danger:focus-visible .pause-key {
+    background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+    box-shadow: 0 4px 0 #7f1d1d, 0 6px 16px rgba(239, 68, 68, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
 }
 
 /* Toasts styled to match the panel system */

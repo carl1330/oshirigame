@@ -16,7 +16,7 @@ interface PlayerStageProps {
 }
 
 const ROOM_SOFT_CAP = 8;
-const MAX_EMPTY_SEATS = 2;
+const MAX_EMPTY_SEATS = 1;
 
 const SEAT_SPRING = { type: "spring", stiffness: 300, damping: 26 } as const;
 
@@ -75,7 +75,7 @@ export default function PlayerStage(props: PlayerStageProps) {
               +
             </span>
             <span className="text-white/40 text-xs group-hover:text-violet-300 transition-colors">
-              {i === 0 ? (props.copied ? "Link copied!" : "Invite") : " "}
+              {props.copied ? "Link copied!" : "Invite"}
             </span>
           </motion.button>
         ))}

@@ -20,7 +20,7 @@ import { FaCog, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
 import GameOptionsDialog from "../components/GameOptionsDialog";
 import GameMenu from "../components/GameMenu";
-import WinnerScreen, { PlayerRanking } from "../components/WinnerScreen";
+import WinnerScreen, { Award, PlayerRanking } from "../components/WinnerScreen";
 import WordListDialog from "../components/WordListDialog";
 import AvatarCreator from "../components/AvatarCreator";
 import PlayerAvatar from "../components/PlayerAvatar";
@@ -122,6 +122,7 @@ interface RoundOverResponse {
 
 interface GameOverResponse {
   winners: PlayerRanking[];
+  awards?: Award[];
 }
 
 export type Message =
@@ -232,6 +233,7 @@ export default function Room() {
   // screen so players can look at the final round's results first
   const [gameOverPending, setGameOverPending] = useState(false);
   const [winners, setWinners] = useState<PlayerRanking[]>([]);
+  const [awards, setAwards] = useState<Award[]>([]);
   const [allWords, setAllWords] = useState<AllWordsResponse | null>(null);
   const [playerWords, setPlayerWords] = useState<PlayerWordResult[]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -452,6 +454,7 @@ export default function Room() {
       case EventGameOver: {
         const gameOverData = event.data as GameOverResponse;
         setWinners(gameOverData.winners);
+        setAwards(gameOverData.awards ?? []);
         if (roundOver) {
           // Let everyone see the last round's play first; a button reveals
           // the winner screen
@@ -479,6 +482,20 @@ export default function Room() {
       });
     }
   }, [playerInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ESC opens the pause menu — unless a dialog is already open, in which
+  // case ESC belongs to that dialog (headlessui closes it on the same press)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (usernameRef.current === "") return;
+      if (gameMenuOpen || gamePropsOpen || wordListOpen || avatarCreatorOpen)
+        return;
+      setGameMenuOpen(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [gameMenuOpen, gamePropsOpen, wordListOpen, avatarCreatorOpen]);
 
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -687,6 +704,7 @@ export default function Room() {
             </div>
             <WinnerScreen
               winners={winners}
+              awards={awards}
               isHost={player?.isHost || false}
               onBackToLobby={handleBackToLobby}
             />
@@ -1080,6 +1098,8 @@ export default function Room() {
         setIsOpen={setGameMenuOpen}
         isHost={player?.isHost || false}
         gameStarted={gameState?.started || false}
+        round={gameState?.round}
+        maxRounds={gameState?.maxRounds}
         onCancelGame={handleCancelGame}
         onLeaveRoom={handleLeaveRoom}
       />

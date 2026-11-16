@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ type game struct {
 	running     bool
 	roundCtx    context.Context
 	cancelRound context.CancelFunc
+	// roundStartedAt anchors per-turn timing for the end-of-game awards.
+	roundStartedAt time.Time
 	sync.Mutex
 }
 
@@ -68,8 +71,20 @@ type Player struct {
 	Score      int    `json:"score"`
 	roundInput string // this player's word in longest-word mode
 	submitted  bool   // locked in their word this round (longest-word mode)
+	stats      playerStats
 	client     *client
 	sync.Mutex
+}
+
+// playerStats accumulates per-game material for the end-of-game awards.
+// Not serialized; awards are computed server-side at game over.
+type playerStats struct {
+	longestWord string // longest accepted word this game
+	fastestMs   int64  // quickest accepted turn, -1 = none yet
+	totalMs     int64  // summed turn time across the game
+	turns       int
+	fails       int   // turns that produced no accepted word
+	submitMs    int64 // this round's lock-in time (longest mode), -1 = not submitted
 }
 
 func NewGame() *game {
@@ -112,6 +127,7 @@ func NewPlayer(username string, token string, avatar string, client *client) *Pl
 		Username: username,
 		Avatar:   avatar,
 		Score:    0,
+		stats:    playerStats{fastestMs: -1, submitMs: -1},
 		client:   client,
 	}
 }
@@ -253,6 +269,9 @@ func (g *game) StartRound() {
 	}
 
 	data := g.MarsalGameState()
+	g.Lock()
+	g.roundStartedAt = time.Now()
+	g.Unlock()
 	g.BroadcastMessage(ROUND_START, data)
 
 	// Ticks buffered during the letter reveal would instantly eat the first
@@ -271,6 +290,32 @@ func (g *game) StartRound() {
 	}
 
 	g.FinishRound()
+}
+
+// roundElapsedMs returns milliseconds since the live round started, clamped
+// to [0, round length] so timer-expiry turns read as the full round.
+func (g *game) roundElapsedMs() int64 {
+	g.Lock()
+	started := g.roundStartedAt
+	g.Unlock()
+	maxMs := g.roundLengthMs()
+	if started.IsZero() {
+		return maxMs
+	}
+	ms := time.Since(started).Milliseconds()
+	if ms < 0 {
+		ms = 0
+	}
+	if ms > maxMs {
+		ms = maxMs
+	}
+	return ms
+}
+
+func (g *game) roundLengthMs() int64 {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return int64(g.GameState.RoundTime) * 1000
 }
 
 // claimFinish atomically flips running to false and reports whether the
@@ -311,7 +356,9 @@ func (g *game) FinishRound() {
 
 	if len(g.players) > 0 {
 		player := g.Dequeue()
-		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(g.GameState.Atama+g.GameState.Input+g.GameState.Oshiri))
+		word := g.GameState.Atama + g.GameState.Input + g.GameState.Oshiri
+		player.RecordTurn(word, g.GameState.Input != "" && g.WordList.IsValidWord(word), g.roundElapsedMs())
+		player.SetPlayerScore(player.GetPlayerScore() + g.WordList.GetScore(word))
 
 		g.Enqueue(player)
 
@@ -388,7 +435,14 @@ func (g *game) FinishLongestRound() {
 	}
 
 	// Longest valid word wins; ties all score
+	roundMs := g.roundLengthMs()
 	for i, player := range queue {
+		// Never locked in = rode out the full clock
+		elapsed := player.GetSubmitMs()
+		if elapsed < 0 {
+			elapsed = roundMs
+		}
+		player.RecordTurn(results[i].Word, results[i].Accepted, elapsed)
 		if results[i].Accepted && len([]rune(results[i].Word)) == maxLen {
 			results[i].Winner = true
 			player.SetPlayerScore(player.GetPlayerScore() + 1)
@@ -424,6 +478,7 @@ func (g *game) ResetRoundInputs() {
 		player.Lock()
 		player.roundInput = ""
 		player.submitted = false
+		player.stats.submitMs = -1
 		player.Unlock()
 	}
 }
@@ -713,9 +768,96 @@ func (g *game) EndGame() {
 
 	var gameOverResponse GameOverResponse
 	gameOverResponse.Winners = winners
+	gameOverResponse.Awards = g.ComputeAwards()
 
 	data, _ := json.Marshal(gameOverResponse)
 	g.BroadcastMessage(GAME_OVER, data)
+}
+
+// ComputeAwards derives the end-of-game superlatives from accumulated player
+// stats. Positive awards always run; the roasts need at least two players so
+// a solo game never roasts its only player.
+func (g *game) ComputeAwards() []Award {
+	type entry struct {
+		player *Player
+		stats  playerStats
+	}
+
+	g.Lock()
+	entries := make([]entry, 0, len(g.players))
+	for _, player := range g.players {
+		entries = append(entries, entry{player, player.GetStats()})
+	}
+	g.Unlock()
+
+	awards := make([]Award, 0, 4)
+	award := func(id string, p *Player, value string) {
+		awards = append(awards, Award{
+			Id:       id,
+			Username: p.Username,
+			Avatar:   p.Avatar,
+			Value:    value,
+		})
+	}
+	seconds := func(ms int64) string {
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	}
+
+	// Wordsmith: longest accepted word of the game
+	best := -1
+	for i, e := range entries {
+		if e.stats.longestWord != "" &&
+			(best < 0 || len([]rune(e.stats.longestWord)) > len([]rune(entries[best].stats.longestWord))) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		award("wordsmith", entries[best].player, entries[best].stats.longestWord)
+	}
+
+	// Speed Demon: fastest single accepted word
+	best = -1
+	for i, e := range entries {
+		if e.stats.fastestMs >= 0 && (best < 0 || e.stats.fastestMs < entries[best].stats.fastestMs) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		award("speed_demon", entries[best].player, seconds(entries[best].stats.fastestMs))
+	}
+
+	if len(entries) < 2 {
+		return awards
+	}
+
+	// The Thinker: slowest average turn
+	best = -1
+	var bestAvg int64
+	for i, e := range entries {
+		if e.stats.turns == 0 {
+			continue
+		}
+		avg := e.stats.totalMs / int64(e.stats.turns)
+		if best < 0 || avg > bestAvg {
+			best, bestAvg = i, avg
+		}
+	}
+	if best >= 0 {
+		award("thinker", entries[best].player, seconds(bestAvg))
+	}
+
+	// Swing and a Miss: most turns without an accepted word
+	best = -1
+	for i, e := range entries {
+		if e.stats.fails > 0 && (best < 0 || e.stats.fails > entries[best].stats.fails) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		award("swing_miss", entries[best].player, fmt.Sprintf("%d", entries[best].stats.fails))
+	}
+
+	return awards
 }
 
 func (g *game) ResetToLobby() {
@@ -749,6 +891,7 @@ func (g *game) ResetToLobby() {
 	g.Lock()
 	for _, player := range g.players {
 		player.SetPlayerScore(0)
+		player.ResetStats()
 		player.Lock()
 		player.roundInput = ""
 		player.submitted = false
@@ -845,6 +988,48 @@ func (p *Player) GetSubmitted() bool {
 	p.Lock()
 	defer p.Unlock()
 	return p.submitted
+}
+
+// RecordTurn folds one finished turn into the player's game stats.
+func (p *Player) RecordTurn(word string, accepted bool, elapsedMs int64) {
+	p.Lock()
+	defer p.Unlock()
+	p.stats.turns++
+	p.stats.totalMs += elapsedMs
+	if accepted {
+		if len([]rune(word)) > len([]rune(p.stats.longestWord)) {
+			p.stats.longestWord = word
+		}
+		if p.stats.fastestMs < 0 || elapsedMs < p.stats.fastestMs {
+			p.stats.fastestMs = elapsedMs
+		}
+	} else {
+		p.stats.fails++
+	}
+}
+
+func (p *Player) GetStats() playerStats {
+	p.Lock()
+	defer p.Unlock()
+	return p.stats
+}
+
+func (p *Player) ResetStats() {
+	p.Lock()
+	defer p.Unlock()
+	p.stats = playerStats{fastestMs: -1, submitMs: -1}
+}
+
+func (p *Player) SetSubmitMs(ms int64) {
+	p.Lock()
+	defer p.Unlock()
+	p.stats.submitMs = ms
+}
+
+func (p *Player) GetSubmitMs() int64 {
+	p.Lock()
+	defer p.Unlock()
+	return p.stats.submitMs
 }
 
 func (p *Player) SetPlayerClient(client *client) {

@@ -57,7 +57,7 @@ function Stepper(props: StepperProps) {
           aria-label={`Decrease ${props.label}`}
           disabled={props.value <= props.min}
           onClick={() => props.onChange(clamp(props.value - step))}
-          className="w-12 h-12 flex items-center justify-center rounded-xl bg-surface-sunken border border-white/10 text-white hover:border-violet-400/50 disabled:opacity-30 disabled:hover:border-white/10 active:scale-95 transition-all"
+          className="keycap-btn w-12 h-12"
         >
           <FaMinus aria-hidden />
         </button>
@@ -74,7 +74,7 @@ function Stepper(props: StepperProps) {
           aria-label={`Increase ${props.label}`}
           disabled={props.value >= props.max}
           onClick={() => props.onChange(clamp(props.value + step))}
-          className="w-12 h-12 flex items-center justify-center rounded-xl bg-surface-sunken border border-white/10 text-white hover:border-violet-400/50 disabled:opacity-30 disabled:hover:border-white/10 active:scale-95 transition-all"
+          className="keycap-btn w-12 h-12"
         >
           <FaPlus aria-hidden />
         </button>
@@ -166,17 +166,28 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
                     key={mode.value}
                     type="button"
                     onClick={() => setGameMode(mode.value)}
-                    className={`flex flex-col items-start px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
                       gameMode === mode.value
                         ? "bg-violet-500/15 border-violet-400/60"
                         : "bg-surface-sunken border-white/10 hover:border-white/25"
                     }`}
                   >
-                    <span className="text-sm font-semibold text-white/90 font-display">
-                      {mode.label}
+                    {/* Mini letter tile — lights purple like an anchor when selected */}
+                    <span
+                      className={`tile w-8 h-8 text-base rounded-md flex-shrink-0 ${
+                        gameMode === mode.value ? "tile-anchor" : ""
+                      }`}
+                      aria-hidden
+                    >
+                      {mode.label[0]}
                     </span>
-                    <span className="text-sm text-white/60">
-                      {mode.description}
+                    <span className="flex flex-col items-start">
+                      <span className="text-sm font-semibold text-white/90 font-display">
+                        {mode.label}
+                      </span>
+                      <span className="text-sm text-white/60">
+                        {mode.description}
+                      </span>
                     </span>
                   </button>
                 ))}
@@ -209,16 +220,14 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
 
             <div>
               <span className="field-label">Language</span>
-              <div className="flex rounded-xl bg-surface-sunken border border-white/10 p-1 gap-1">
+              <div className="flex gap-2">
                 {languages.map((lang) => (
                   <button
                     key={lang.value}
                     type="button"
                     onClick={() => handleLanguageChange(lang.value)}
-                    className={`flex-1 h-10 rounded-lg font-display font-semibold text-sm transition-colors ${
-                      language === lang.value
-                        ? "bg-gradient-to-b from-violet-500 to-violet-700 text-white shadow"
-                        : "text-white/60 hover:text-white"
+                    className={`keycap-btn flex-1 h-12 text-sm ${
+                      language === lang.value ? "keycap-btn-active" : ""
                     }`}
                   >
                     {lang.label}
