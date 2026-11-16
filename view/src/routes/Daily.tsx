@@ -225,6 +225,24 @@ export default function Daily() {
 
   const combo = challenge?.combos[round];
 
+  const languagePicker = (
+    <div className="flex gap-2">
+      {LANGUAGES.map((lang) => (
+        <button
+          key={lang.id}
+          onClick={() => selectLanguage(lang.id)}
+          className={`px-4 py-2 rounded-full font-display text-sm border transition-colors ${
+            language === lang.id
+              ? "bg-violet-600 border-violet-400 text-white"
+              : "bg-surface-sunken border-white/10 text-white/50 hover:text-white"
+          }`}
+        >
+          {lang.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="w-full min-h-screen flex p-2">
       <div className="flex w-full flex-col gap-2">
@@ -259,21 +277,7 @@ export default function Daily() {
                   today. {challenge.roundTime} seconds per word, one attempt per
                   day. Highest score tops the leaderboard!
                 </p>
-                <div className="flex gap-2">
-                  {LANGUAGES.map((lang) => (
-                    <button
-                      key={lang.id}
-                      onClick={() => selectLanguage(lang.id)}
-                      className={`px-4 py-2 rounded-full font-display text-sm border transition-colors ${
-                        language === lang.id
-                          ? "bg-violet-600 border-violet-400 text-white"
-                          : "bg-surface-sunken border-white/10 text-white/50 hover:text-white"
-                      }`}
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
-                </div>
+                {languagePicker}
                 <input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -352,6 +356,7 @@ export default function Daily() {
 
             {phase === "done" && (
               <>
+                {languagePicker}
                 {result ? (
                   <>
                     <div className="flex flex-col items-center gap-1">
