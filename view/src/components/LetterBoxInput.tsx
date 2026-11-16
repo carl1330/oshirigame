@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import useSound from "use-sound";
 
@@ -10,16 +10,15 @@ interface LetterBoxProps {
   setText: (text: string) => void;
   disabled: boolean;
   focus: boolean;
+  /** Called when the player presses Enter (submit-on-enter option) */
+  onEnter?: () => void;
 }
 
 export default function LetterBoxInput(props: LetterBoxProps) {
-  const [playbackRate, setPlaybackRate] = useState(0.75);
   const [inputSound] = useSound(clickSound, {
-    playbackRate,
     interrupt: true,
   });
   const [backspaceSound] = useSound(clackSound, {
-    playbackRate,
     interrupt: true,
   });
 
@@ -29,20 +28,23 @@ export default function LetterBoxInput(props: LetterBoxProps) {
     const newValue = e.target.value.toUpperCase();
     const newLength = newValue.length;
 
-    // Play sound
-    setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
+    // Play sound with a slightly randomized pitch per keystroke
+    const playbackRate = Math.random() * (1 - 0.75) + 0.75;
     if (newLength < prevLength.current) {
-      backspaceSound();
+      backspaceSound({ playbackRate });
     } else if (newLength > prevLength.current) {
-      inputSound();
+      inputSound({ playbackRate });
     }
     prevLength.current = newLength;
 
     props.setText(newValue);
   };
 
-  const handleKeyPress = () => {
-    setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      props.onEnter?.();
+    }
   };
 
   const ref = useRef<HTMLInputElement>(null);
@@ -91,16 +93,13 @@ export default function LetterBoxInput(props: LetterBoxProps) {
             transition={{ duration: 0.3 }}
             key={index}
             onClick={handleBoxClick}
-            className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center flex-shrink-0 cursor-text"
+            className="tile cursor-text"
           >
             {letter}
           </motion.div>
         ))
       ) : (
-        <div
-          onClick={handleBoxClick}
-          className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center cursor-text"
-        />
+        <div onClick={handleBoxClick} className="tile tile-empty cursor-text" />
       )}
     </>
   );

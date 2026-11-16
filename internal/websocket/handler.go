@@ -31,6 +31,9 @@ const (
 	UPDATE_GAME_OPTIONS = "UPDATE_GAME_OPTIONS"
 	GAME_OVER           = "GAME_OVER"
 	RESET_GAME          = "RESET_GAME"
+	END_TURN            = "END_TURN"
+	ALL_WORDS           = "ALL_WORDS"
+	ROOM_NOT_FOUND      = "ROOM_NOT_FOUND"
 	ERROR               = "ERROR"
 )
 
@@ -47,6 +50,7 @@ type JoinRoomMessage struct {
 	Id       string
 	Username string
 	Token    string
+	Avatar   string
 }
 
 type StartGameMessage struct {
@@ -65,15 +69,33 @@ type GameOptionsUpdateMessage struct {
 	RoundTime           int
 	MinWordCombinations int
 	Language            string
+	GameMode            string
 	BannedAtama         string
 	BannedOshiri        string
+	SubmitOnEnter       bool
+}
+
+type AllWordsResponse struct {
+	Atama  string   `json:"atama"`
+	Oshiri string   `json:"oshiri"`
+	Words  []string `json:"words"`
 }
 
 type RoundOverResponse struct {
-	TopWords     []string        `json:"topWords"`
-	GameState    json.RawMessage `json:"gameState"`
-	Word         string          `json:"word"`
-	WordAccepted bool            `json:"wordAccepted"`
+	TopWords     []string           `json:"topWords"`
+	GameState    json.RawMessage    `json:"gameState"`
+	Word         string             `json:"word"`
+	WordAccepted bool               `json:"wordAccepted"`
+	PlayerWords  []PlayerWordResult `json:"playerWords,omitempty"`
+}
+
+// PlayerWordResult is one player's outcome in a longest-word round.
+type PlayerWordResult struct {
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+	Word     string `json:"word"`
+	Accepted bool   `json:"accepted"`
+	Winner   bool   `json:"winner"`
 }
 
 type GameOverResponse struct {
@@ -82,6 +104,7 @@ type GameOverResponse struct {
 
 type PlayerRanking struct {
 	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
 	Score    int    `json:"score"`
 	Rank     int    `json:"rank"`
 }
@@ -153,31 +176,35 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 	game, err := h.GetGame(joinRoomMessage.Id)
 
 	if err != nil {
+		c.send <- &Message{
+			Type: ROOM_NOT_FOUND,
+			Data: []byte(`{}`),
+		}
 		return err
 	}
 
-	if game.GetStarted() {
-		errMsg := &ErrorResponse{
-			Message: "Can't join room, game has already started",
-		}
-
-		data, err := json.Marshal(errMsg)
-
-		if err != nil {
-			return fmt.Errorf("can't join gameroom, game already started")
-		}
-
-		c.send <- &Message{
-			Type: ERROR,
-			Data: data,
-		}
-		return fmt.Errorf("can't join gameroom, game already started")
+	// Avatar config is a short client-generated string; cap it defensively
+	if len(joinRoomMessage.Avatar) > 64 {
+		joinRoomMessage.Avatar = ""
 	}
 
-	player, err := game.GetPlayer(joinRoomMessage.Token)
+	// A known token may rejoin a started game (reconnect); only brand-new
+	// players are locked out once the game is running.
+	player, playerErr := game.GetPlayer(joinRoomMessage.Token)
 
-	if err != nil {
-		player = NewPlayer(joinRoomMessage.Username, joinRoomMessage.Token, c)
+	if playerErr != nil {
+		if game.GetStarted() {
+			errMsg := &ErrorResponse{
+				Message: "Can't join room, game has already started",
+			}
+			data, _ := json.Marshal(errMsg)
+			c.send <- &Message{
+				Type: ERROR,
+				Data: data,
+			}
+			return fmt.Errorf("can't join gameroom, game already started")
+		}
+		player = NewPlayer(joinRoomMessage.Username, joinRoomMessage.Token, joinRoomMessage.Avatar, c)
 	} else {
 		player.SetPlayerClient(c)
 	}
@@ -279,12 +306,25 @@ func (h *hub) PlayerInput(m *Message, c *client) error {
 		return err
 	}
 
-	if !player.IsLeader {
-		return fmt.Errorf("player is not leader")
+	if !game.GetStarted() {
+		return fmt.Errorf("game not started")
 	}
 
-	if !game.GameState.Started {
-		return fmt.Errorf("game not started")
+	// Longest-word mode: everyone types their own hidden word at the same time
+	if game.GetGameMode() == GameModeLongest {
+		if game.GetRoundOver() {
+			return nil
+		}
+		input := strings.ToLower(playerInputMessage.Input)
+		if len([]rune(input)) > 45 {
+			input = string([]rune(input)[:45])
+		}
+		player.SetRoundInput(input)
+		return nil
+	}
+
+	if !player.IsLeader {
+		return fmt.Errorf("player is not leader")
 	}
 
 	game.GameState.Lock()
@@ -310,14 +350,93 @@ func (h *hub) UpdateGameOptions(m *Message, c *client) error {
 		return err
 	}
 
+	game.SetGameMode(gameOptionsUpdateMessage.GameMode)
 	game.SetMaxRounds(gameOptionsUpdateMessage.MaxRounds)
 	game.SetWordCombinations(gameOptionsUpdateMessage.MinWordCombinations)
 	game.SetRoundTime(gameOptionsUpdateMessage.RoundTime)
 	// Language first so banned letters are sanitized against the right alphabet
 	game.SetLanguage(gameOptionsUpdateMessage.Language)
 	game.SetBannedLetters(gameOptionsUpdateMessage.BannedAtama, gameOptionsUpdateMessage.BannedOshiri)
+	game.SetSubmitOnEnter(gameOptionsUpdateMessage.SubmitOnEnter)
 
 	game.BroadcastGameState()
+
+	return nil
+}
+
+// EndTurn lets the active player finish the round before the timer runs out.
+// Only allowed when the submit-on-enter option is enabled.
+func (h *hub) EndTurn(m *Message, c *client) error {
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	player, err := game.GetPlayer(c.token)
+
+	if err != nil {
+		return err
+	}
+
+	if !game.GetStarted() || game.GetRoundOver() || !game.IsRunning() {
+		return fmt.Errorf("no active round to end")
+	}
+
+	// Longest-word mode: Enter locks in this player's word; the round ends
+	// early once everyone has locked in.
+	if game.GetGameMode() == GameModeLongest {
+		player.SetSubmitted(true)
+		if game.AllSubmitted() {
+			game.EndTurnEarly()
+		}
+		return nil
+	}
+
+	if !player.IsLeader {
+		return fmt.Errorf("not this player's turn")
+	}
+
+	if !game.GetSubmitOnEnter() {
+		return fmt.Errorf("submit on enter is disabled")
+	}
+
+	game.EndTurnEarly()
+
+	return nil
+}
+
+// AllWords sends the requesting client every valid word for the finished
+// round's letters. Only available once the round is over, so it can't be
+// used to cheat mid-round.
+func (h *hub) AllWords(m *Message, c *client) error {
+	game, err := h.GetGame(c.gameId)
+
+	if err != nil {
+		return err
+	}
+
+	if !game.GetRoundOver() {
+		return fmt.Errorf("round is not over")
+	}
+
+	atama, oshiri := game.GetRoundLetters()
+	response := AllWordsResponse{
+		Atama:  atama,
+		Oshiri: oshiri,
+		Words:  game.WordList.AllWords(atama, oshiri),
+	}
+
+	data, err := json.Marshal(response)
+
+	if err != nil {
+		return err
+	}
+
+	c.send <- &Message{
+		Type: ALL_WORDS,
+		Data: data,
+	}
 
 	return nil
 }

@@ -20,6 +20,7 @@ type game struct {
 	WordList    *oshirigame.WordList
 	register    chan *Player
 	unregister  chan *client
+	expire      chan *client
 	broadcast   chan *Message
 	running     bool
 	roundCtx    context.Context
@@ -27,8 +28,17 @@ type game struct {
 	sync.Mutex
 }
 
+// How long a disconnected player may reconnect before being removed from the game.
+const reconnectGrace = 30 * time.Second
+
+const (
+	GameModeClassic = "classic"
+	GameModeLongest = "longest"
+)
+
 type GameState struct {
 	Started          bool      `json:"started"`
+	GameMode         string    `json:"gameMode"`
 	Round            int       `json:"round"`
 	MaxRounds        int       `json:"maxRounds"`
 	Time             int       `json:"time"`
@@ -37,6 +47,7 @@ type GameState struct {
 	Language         string    `json:"language"`
 	BannedAtama      string    `json:"bannedAtama"`
 	BannedOshiri     string    `json:"bannedOshiri"`
+	SubmitOnEnter    bool      `json:"submitOnEnter"`
 	PlayerQueue      []*Player `json:"playerQueue"`
 	Input            string    `json:"input"`
 	Atama            string    `json:"atama"`
@@ -47,11 +58,17 @@ type GameState struct {
 }
 
 type Player struct {
-	token    string
-	IsLeader bool   `json:"isLeader"`
-	Username string `json:"username"`
-	Score    int    `json:"score"`
-	client   *client
+	token string
+	// IsLeader marks whose turn it is (head of the queue); IsHost marks the
+	// stable room admin who controls options, starting and round flow.
+	IsLeader   bool   `json:"isLeader"`
+	IsHost     bool   `json:"isHost"`
+	Username   string `json:"username"`
+	Avatar     string `json:"avatar"`
+	Score      int    `json:"score"`
+	roundInput string // this player's word in longest-word mode
+	submitted  bool   // locked in their word this round (longest-word mode)
+	client     *client
 	sync.Mutex
 }
 
@@ -63,6 +80,7 @@ func NewGame() *game {
 		broadcast:  make(chan *Message),
 		register:   make(chan *Player),
 		unregister: make(chan *client),
+		expire:     make(chan *client),
 		players:    make(map[string]*Player),
 		GameState:  NewGameState(),
 		WordList:   oshirigame.NewWordList(),
@@ -73,6 +91,7 @@ func NewGame() *game {
 func NewGameState() *GameState {
 	return &GameState{
 		Started:          false,
+		GameMode:         GameModeClassic,
 		Round:            1,
 		MaxRounds:        10,
 		Time:             0,
@@ -81,15 +100,17 @@ func NewGameState() *GameState {
 		Language:         string(oshirigame.English),
 		BannedAtama:      "",
 		BannedOshiri:     "",
+		SubmitOnEnter:    false,
 		PlayerQueue:      make([]*Player, 0),
 	}
 }
 
-func NewPlayer(username string, token string, client *client) *Player {
+func NewPlayer(username string, token string, avatar string, client *client) *Player {
 	return &Player{
 		token:    token,
 		IsLeader: false,
 		Username: username,
+		Avatar:   avatar,
 		Score:    0,
 		client:   client,
 	}
@@ -100,6 +121,17 @@ func (g *game) Enqueue(player *Player) {
 	defer g.GameState.Unlock()
 	if len(g.GameState.PlayerQueue) == 0 {
 		player.IsLeader = true
+	}
+	// A room always has exactly one host; claim the role if it's vacant
+	hasHost := false
+	for _, p := range g.GameState.PlayerQueue {
+		if p.IsHost {
+			hasHost = true
+			break
+		}
+	}
+	if !hasHost {
+		player.IsHost = true
 	}
 	g.GameState.PlayerQueue = append(g.GameState.PlayerQueue, player)
 }
@@ -128,6 +160,10 @@ func (g *game) RemovePlayer(token string) {
 
 			if len(g.GameState.PlayerQueue) > 0 {
 				g.GameState.PlayerQueue[0].IsLeader = true
+				// If the host left, the next player in line inherits the room
+				if player.IsHost {
+					g.GameState.PlayerQueue[0].IsHost = true
+				}
 				g.SendPlayerState(g.GameState.PlayerQueue[0])
 			}
 		}
@@ -177,6 +213,7 @@ func (g *game) StartRound() {
 	g.SetRoundOver(false)
 	g.SetGameStateTime(g.GameState.RoundTime)
 	g.SetGameStateInput("")
+	g.ResetRoundInputs()
 
 	//Generate random letters and check if that combination of letters has more than 400 possible words
 	//If not try again until successful. Capped attempts: banned letters can make the
@@ -223,9 +260,39 @@ func (g *game) StartRound() {
 	g.FinishRound()
 }
 
+// claimFinish atomically flips running to false and reports whether the
+// caller won the claim, so FinishRound runs exactly once per round even if
+// the timer and an early end race each other.
+func (g *game) claimFinish() bool {
+	g.Lock()
+	defer g.Unlock()
+	if !g.running {
+		return false
+	}
+	g.running = false
+	return true
+}
+
+// EndTurnEarly stops the round timer and finishes the round immediately.
+func (g *game) EndTurnEarly() {
+	g.Lock()
+	if g.cancelRound != nil {
+		g.cancelRound()
+		g.cancelRound = nil
+		g.roundCtx = nil
+	}
+	g.Unlock()
+	g.FinishRound()
+}
+
 func (g *game) FinishRound() {
-	// Check if game is still running (not cancelled)
-	if !g.IsRunning() {
+	// Only the first caller finishes the round (timer vs early end race)
+	if !g.claimFinish() {
+		return
+	}
+
+	if g.GetGameMode() == GameModeLongest {
+		g.FinishLongestRound()
 		return
 	}
 
@@ -263,8 +330,6 @@ func (g *game) FinishRound() {
 			g.SendPlayerState(player)
 		}
 
-		g.SetGameRunning(false)
-
 		// Check if game is over (max rounds reached) before incrementing for next round
 		// If this was the last player and we've reached max rounds, end the game
 		if wasLastPlayer && g.IsGameOver() {
@@ -277,6 +342,110 @@ func (g *game) FinishRound() {
 	}
 }
 
+// FinishLongestRound scores a longest-word round: every valid word is
+// compared by length and the longest one(s) earn a point.
+func (g *game) FinishLongestRound() {
+	if len(g.players) == 0 {
+		return
+	}
+
+	atama, oshiri := g.GetRoundLetters()
+
+	// Snapshot the queue so results come out in a stable player order
+	g.GameState.Lock()
+	queue := make([]*Player, len(g.GameState.PlayerQueue))
+	copy(queue, g.GameState.PlayerQueue)
+	g.GameState.Unlock()
+
+	results := make([]PlayerWordResult, 0, len(queue))
+	maxLen := 0
+	for _, player := range queue {
+		input := player.GetRoundInput()
+		word := atama + input + oshiri
+		accepted := input != "" && g.WordList.IsValidWord(word)
+		if accepted && len([]rune(word)) > maxLen {
+			maxLen = len([]rune(word))
+		}
+		results = append(results, PlayerWordResult{
+			Username: player.Username,
+			Avatar:   player.Avatar,
+			Word:     word,
+			Accepted: accepted,
+		})
+	}
+
+	// Longest valid word wins; ties all score
+	for i, player := range queue {
+		if results[i].Accepted && len([]rune(results[i].Word)) == maxLen {
+			results[i].Winner = true
+			player.SetPlayerScore(player.GetPlayerScore() + 1)
+		}
+	}
+
+	g.SetRoundOver(true)
+
+	var roundOverResponse RoundOverResponse
+	roundOverResponse.TopWords = g.WordList.TopWords(atama, oshiri)
+	roundOverResponse.PlayerWords = results
+	roundOverResponse.GameState = g.MarsalGameState()
+
+	data, _ := json.Marshal(roundOverResponse)
+	g.BroadcastMessage(ROUND_FINISHED, data)
+
+	for _, player := range g.players {
+		g.SendPlayerState(player)
+	}
+
+	if g.IsGameOver() {
+		g.EndGame()
+	} else {
+		g.IncrementRound()
+	}
+}
+
+// ResetRoundInputs clears every player's word and submit flag for a new round.
+func (g *game) ResetRoundInputs() {
+	g.Lock()
+	defer g.Unlock()
+	for _, player := range g.players {
+		player.Lock()
+		player.roundInput = ""
+		player.submitted = false
+		player.Unlock()
+	}
+}
+
+// AllSubmitted reports whether every player has locked in a word (longest-word mode).
+func (g *game) AllSubmitted() bool {
+	g.Lock()
+	defer g.Unlock()
+	if len(g.players) == 0 {
+		return false
+	}
+	for _, player := range g.players {
+		if !player.GetSubmitted() {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *game) GetGameMode() string {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.GameMode
+}
+
+// SetGameMode switches game mode; ignores unknown modes.
+func (g *game) SetGameMode(mode string) {
+	if mode != GameModeClassic && mode != GameModeLongest {
+		return
+	}
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.GameMode = mode
+}
+
 func (g *game) Run() {
 	for {
 		select {
@@ -287,13 +456,30 @@ func (g *game) Run() {
 			g.players[player.client.token] = player
 			go g.BroadcastGameState()
 			go g.SendPlayerState(player)
-		case player := <-g.unregister:
-			g.RemovePlayer(player.token)
-			go g.BroadcastGameState()
+		case c := <-g.unregister:
+			// Don't drop the player immediately — give them a grace period
+			// to reconnect (flaky mobile connections, page reloads).
+			if player, ok := g.players[c.token]; ok && player.GetClient() == c {
+				go func() {
+					time.Sleep(reconnectGrace)
+					g.expire <- c
+				}()
+			}
+		case c := <-g.expire:
+			// Only remove if the player never reconnected (client unchanged).
+			if player, ok := g.players[c.token]; ok && player.GetClient() == c {
+				g.RemovePlayer(c.token)
+				go g.BroadcastGameState()
+			}
 		case message := <-g.broadcast:
 			for _, player := range g.players {
 				player.Lock()
-				player.client.send <- message
+				// Non-blocking: a disconnected player's send buffer may be
+				// full, and that must never stall the whole game loop.
+				select {
+				case player.client.send <- message:
+				default:
+				}
 				player.Unlock()
 			}
 		}
@@ -317,7 +503,12 @@ func (g *game) SendPlayerState(player *Player) {
 		Type: PLAYER_STATE,
 		Data: data,
 	}
-	player.client.send <- message
+	player.Lock()
+	defer player.Unlock()
+	select {
+	case player.client.send <- message:
+	default:
+	}
 }
 
 func RandomLetter(alphabet string, banned string) string {
@@ -469,6 +660,7 @@ func (g *game) EndGame() {
 	// Calculate winners by sorting players by score
 	type playerScore struct {
 		username string
+		avatar   string
 		score    int
 	}
 
@@ -476,6 +668,7 @@ func (g *game) EndGame() {
 	for _, player := range g.players {
 		scores = append(scores, playerScore{
 			username: player.Username,
+			avatar:   player.Avatar,
 			score:    player.GetPlayerScore(),
 		})
 	}
@@ -499,6 +692,7 @@ func (g *game) EndGame() {
 		}
 		winners = append(winners, PlayerRanking{
 			Username: ps.username,
+			Avatar:   ps.avatar,
 			Score:    ps.score,
 			Rank:     currentRank,
 		})
@@ -542,6 +736,10 @@ func (g *game) ResetToLobby() {
 	g.Lock()
 	for _, player := range g.players {
 		player.SetPlayerScore(0)
+		player.Lock()
+		player.roundInput = ""
+		player.submitted = false
+		player.Unlock()
 	}
 	g.Unlock()
 
@@ -572,6 +770,31 @@ func (g *game) SetRoundTime(time int) {
 	g.GameState.RoundTime = time
 }
 
+func (g *game) SetSubmitOnEnter(enabled bool) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.SubmitOnEnter = enabled
+}
+
+func (g *game) GetSubmitOnEnter() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.SubmitOnEnter
+}
+
+func (g *game) GetRoundOver() bool {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.RoundOver
+}
+
+// GetRoundLetters returns the current atama/oshiri pair.
+func (g *game) GetRoundLetters() (string, string) {
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	return g.GameState.Atama, g.GameState.Oshiri
+}
+
 func (p *Player) SetPlayerScore(score int) {
 	p.Lock()
 	defer p.Unlock()
@@ -584,8 +807,41 @@ func (p *Player) GetPlayerScore() int {
 	return p.Score
 }
 
+func (p *Player) SetRoundInput(input string) {
+	p.Lock()
+	defer p.Unlock()
+	if p.submitted {
+		return
+	}
+	p.roundInput = input
+}
+
+func (p *Player) GetRoundInput() string {
+	p.Lock()
+	defer p.Unlock()
+	return p.roundInput
+}
+
+func (p *Player) SetSubmitted(submitted bool) {
+	p.Lock()
+	defer p.Unlock()
+	p.submitted = submitted
+}
+
+func (p *Player) GetSubmitted() bool {
+	p.Lock()
+	defer p.Unlock()
+	return p.submitted
+}
+
 func (p *Player) SetPlayerClient(client *client) {
 	p.Lock()
 	defer p.Unlock()
 	p.client = client
+}
+
+func (p *Player) GetClient() *client {
+	p.Lock()
+	defer p.Unlock()
+	return p.client
 }

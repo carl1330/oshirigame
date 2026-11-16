@@ -10,7 +10,14 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/room/:gameId" element={<Room />} />
       </Routes>
-      <ToastContainer />
+      <ToastContainer
+        position="top-center"
+        autoClose={4000}
+        theme="dark"
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+      />
     </Router>
   );
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"embed"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -118,6 +119,25 @@ func (wl *WordList) TopWords(atama string, oshiri string) []string {
 			}
 		}
 	}
+	return words
+}
+
+// AllWords returns every valid word for the letter combination,
+// longest first, alphabetical within the same length.
+func (wl *WordList) AllWords(atama string, oshiri string) []string {
+	words := make([]string, 0)
+	for word := range wl.Words {
+		if strings.HasPrefix(word, atama) && strings.HasSuffix(word, oshiri) {
+			words = append(words, word)
+		}
+	}
+	sort.Slice(words, func(i, j int) bool {
+		li, lj := len([]rune(words[i])), len([]rune(words[j]))
+		if li != lj {
+			return li > lj
+		}
+		return words[i] < words[j]
+	})
 	return words
 }
 

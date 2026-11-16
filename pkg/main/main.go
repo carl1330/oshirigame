@@ -57,11 +57,17 @@ func main() {
 			}
 		}
 
-		// For all other routes (SPA routes), serve index.html
+		// For all other routes (SPA routes), serve index.html.
+		// index.html must never be cached: it points at hashed asset
+		// bundles, and a stale copy keeps serving old JS after a rebuild.
+		w.Header().Set("Cache-Control", "no-cache")
 		indexPath := filepath.Join(staticDir, "index.html")
 		http.ServeFile(w, r, indexPath)
 	})
 
 	fmt.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", r)
+	if err := http.ListenAndServe(":8080", r); err != nil {
+		fmt.Fprintln(os.Stderr, "server error:", err)
+		os.Exit(1)
+	}
 }

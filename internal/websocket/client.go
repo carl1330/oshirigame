@@ -37,7 +37,9 @@ func NewClient(conn *websocket.Conn, token string) *client {
 		token:  token,
 		gameId: "",
 		Conn:   conn,
-		send:   make(chan *Message),
+		// Buffered so slow/dead connections don't stall senders; writers
+		// drop messages (select/default) once the buffer is full.
+		send: make(chan *Message, 32),
 	}
 }
 

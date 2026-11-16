@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import Confetti from "react-confetti";
-import Avatar from "boring-avatars";
+import PlayerAvatar from "./PlayerAvatar";
 import Button from "./Button";
 
 export interface PlayerRanking {
   username: string;
+  avatar?: string;
   score: number;
   rank: number;
 }
 
 interface WinnerScreenProps {
   winners: PlayerRanking[];
-  isLeader?: boolean;
+  isHost?: boolean;
   onNewGame?: () => void;
   onBackToLobby?: () => void;
 }
@@ -61,7 +62,7 @@ export default function WinnerScreen(props: WinnerScreenProps) {
           gravity={0.3}
         />
       )}
-      <h1 className="text-white text-3xl sm:text-4xl md:text-5xl font-bold text-center mb-4">
+      <h1 className="text-white font-display text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-4">
         Game Over!
       </h1>
 
@@ -73,10 +74,10 @@ export default function WinnerScreen(props: WinnerScreenProps) {
             <div className="flex flex-col items-center">
               <div className="mb-2 sm:mb-3">
                 <div className="relative">
-                  <Avatar
-                    variant="beam"
+                  <PlayerAvatar
+                    username={second.username}
+                    avatar={second.avatar}
                     size={window.innerWidth < 640 ? 60 : 80}
-                    name={second.username}
                   />
                   <div className="absolute -bottom-1 -right-1 bg-gray-400 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-xl sm:text-2xl shadow-lg">
                     🥈
@@ -101,10 +102,10 @@ export default function WinnerScreen(props: WinnerScreenProps) {
             <div className="flex flex-col items-center">
               <div className="mb-2 sm:mb-3">
                 <div className="relative">
-                  <Avatar
-                    variant="beam"
+                  <PlayerAvatar
+                    username={first.username}
+                    avatar={first.avatar}
                     size={window.innerWidth < 640 ? 80 : 100}
-                    name={first.username}
                   />
                   <div className="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-2xl sm:text-3xl shadow-lg">
                     🥇
@@ -131,10 +132,10 @@ export default function WinnerScreen(props: WinnerScreenProps) {
             <div className="flex flex-col items-center">
               <div className="mb-2 sm:mb-3">
                 <div className="relative">
-                  <Avatar
-                    variant="beam"
+                  <PlayerAvatar
+                    username={third.username}
+                    avatar={third.avatar}
                     size={window.innerWidth < 640 ? 60 : 80}
-                    name={third.username}
                   />
                   <div className="absolute -bottom-1 -right-1 bg-orange-600 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-xl sm:text-2xl shadow-lg">
                     🥉
@@ -159,20 +160,20 @@ export default function WinnerScreen(props: WinnerScreenProps) {
       {/* Other Players */}
       {props.winners.length > 3 && (
         <div className="w-full max-w-2xl mt-4">
-          <h2 className="text-white text-lg sm:text-xl font-semibold mb-3 text-center">
+          <h2 className="text-white/50 font-display text-sm sm:text-base uppercase tracking-widest mb-3 text-center">
             Other Players
           </h2>
           <div className="space-y-2 max-h-40 sm:max-h-48 overflow-y-auto">
             {props.winners.slice(3).map((winner, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between gap-3 px-4 py-2 rounded-lg bg-[#3F3F3F]"
+                className="flex items-center justify-between gap-3 px-4 py-2 rounded-xl bg-surface-raised border border-white/5"
               >
                 <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                  <Avatar
-                    variant="beam"
+                  <PlayerAvatar
+                    username={winner.username}
+                    avatar={winner.avatar}
                     size={window.innerWidth < 640 ? 32 : 40}
-                    name={winner.username}
                   />
                   <span className="text-white/60 text-sm sm:text-base font-semibold flex-shrink-0">
                     #{winner.rank}
@@ -191,13 +192,13 @@ export default function WinnerScreen(props: WinnerScreenProps) {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md mt-4">
-        {props.isLeader && props.onBackToLobby ? (
+        {props.isHost && props.onBackToLobby ? (
           <Button onClick={props.onBackToLobby} className="flex-1 py-3">
             Back to Lobby
           </Button>
         ) : (
-          <p className="text-white text-center text-sm sm:text-base px-4">
-            Waiting for leader to start new game...
+          <p className="text-white/60 text-center text-sm sm:text-base px-4">
+            Waiting for the host to start a new game...
           </p>
         )}
       </div>

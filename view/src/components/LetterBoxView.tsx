@@ -4,33 +4,30 @@ import usePrevious from "../hooks/usePrevious";
 
 import clickSound from "../../public/sounds/click1.ogg";
 import clackSound from "../../public/sounds/backspace.ogg";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 interface LetterBoxProps {
   text: string;
 }
 
 export default function LetterBoxView(props: LetterBoxProps) {
-  const [playbackRate, setPlaybackRate] = useState(0.75);
   const prevInput = usePrevious(props.text);
   const [inputSound] = useSound(clickSound, {
-    playbackRate,
     interrupt: true,
   });
   const [backspaceSound] = useSound(clackSound, {
-    playbackRate,
     interrupt: true,
   });
   useEffect(() => {
-    setPlaybackRate(Math.random() * (1 - 0.75) + 0.75);
-    if (prevInput) {
-      if (props.text.length > prevInput?.length) {
-        inputSound();
+    const playbackRate = Math.random() * (1 - 0.75) + 0.75;
+    if (prevInput !== undefined && props.text !== prevInput) {
+      if (props.text.length > prevInput.length) {
+        inputSound({ playbackRate });
       } else {
-        backspaceSound();
+        backspaceSound({ playbackRate });
       }
     }
-  }, [props.text]);
+  }, [props.text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -40,13 +37,13 @@ export default function LetterBoxView(props: LetterBoxProps) {
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 0.3 }}
             key={index}
-            className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center flex-shrink-0"
+            className="tile"
           >
             {letter}
           </motion.div>
         ))
       ) : (
-        <div className="text-center text-3xl sm:text-5xl text-white w-12 h-12 sm:w-16 sm:h-16 border rounded-md border-white flex justify-center items-center" />
+        <div className="tile tile-empty" />
       )}
     </>
   );
