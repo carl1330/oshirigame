@@ -63,6 +63,12 @@ body {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   }
 
+  /* TV mode (10-foot UI): everything in the shared tile language scales up
+     so it reads from a couch. Applied by the /tv route on its play area. */
+  .tv-scale .tile {
+    @apply w-16 h-16 text-5xl lg:w-20 lg:h-20 lg:text-6xl;
+  }
+
   .tile-empty {
     background: var(--surface-sunken);
     border: 1px dashed rgba(255, 255, 255, 0.18);

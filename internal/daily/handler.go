@@ -446,6 +446,21 @@ func (h *Handler) Leaderboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not read leaderboard")
 		return
 	}
+	// Other players' words are only revealed once the viewer has finished
+	// their own run (a past day's board is always open).
+	revealWords := day != Today()
+	if !revealWords {
+		if token := r.URL.Query().Get("token"); tokenPattern.MatchString(token) {
+			if _, _, err := h.store.GetEntry(day, language, token); err == nil {
+				revealWords = true
+			}
+		}
+	}
+	if !revealWords {
+		for i := range entries {
+			entries[i].Results = nil
+		}
+	}
 	writeJSON(w, http.StatusOK, leaderboardResponse{
 		Day:      day,
 		Language: language,

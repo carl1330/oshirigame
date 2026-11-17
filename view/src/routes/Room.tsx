@@ -67,7 +67,7 @@ export type GameState = {
   eliminatedPlayers: Player[] | null;
 };
 
-type Player = {
+export type Player = {
   token: string;
   username: string;
   avatar: string;
@@ -81,12 +81,21 @@ type Player = {
   lives: number;
   /** Battle royale: knocked out of the game */
   eliminated: boolean;
+  /** Longest word: has typed something this round (the word stays hidden) */
+  hasRoundInput: boolean;
+  /** Longest word: locked their word in this round */
+  submitted: boolean;
 };
 
 interface JoinGameMessage {
   username: string;
   id: string;
   avatar: string;
+}
+
+/** Watch-only attach (TV mode): no username, no seat, just a room id */
+export interface JoinSpectateMessage {
+  id: string;
 }
 
 interface PlayerInputMessage {
@@ -140,7 +149,7 @@ export interface PlayerWordResult {
   winner: boolean;
 }
 
-interface RoundOverResponse {
+export interface RoundOverResponse {
   topWords: string[];
   gameState: GameState;
   wordAccepted: boolean;
@@ -161,7 +170,7 @@ interface RoundOverResponse {
 }
 
 /** Battle royale turn outcome kept around for the round-over screen */
-interface RoyaleResult {
+export interface RoyaleResult {
   turnUsername: string;
   accepted: boolean;
   tooShort: boolean;
@@ -174,47 +183,47 @@ interface RoyaleResult {
 }
 
 /** Pick one phrase from a pool using the result's fixed seed */
-function vary(pool: string[], seed: number): string {
+export function vary(pool: string[], seed: number): string {
   return pool[Math.floor(seed * pool.length) % pool.length];
 }
 
-const CHAIN_ALIVE_PHRASES = [
+export const CHAIN_ALIVE_PHRASES = [
   "keeps the chain alive!",
   "raises the bar!",
   "keeps it rolling!",
   "delivers under pressure!",
   "stays in the fight!",
 ];
-const NOT_A_WORD_PHRASES = [
+export const NOT_A_WORD_PHRASES = [
   "Not a valid word",
   "That's not a word…",
   "The dictionary disagrees",
   "No such word!",
 ];
-const LOSE_LIFE_PHRASES = [
+export const LOSE_LIFE_PHRASES = [
   "loses a life",
   "drops a life",
   "burns a life",
   "is down a life",
 ];
-const ELIMINATED_PHRASES = [
+export const ELIMINATED_PHRASES = [
   "has been eliminated!",
   "is out of the game!",
   "is down and out!",
   "won't be coming back!",
 ];
-const tooShortPhrases = (n: number) => [
+export const tooShortPhrases = (n: number) => [
   `Too short! The chain needed ${n} letters`,
   `Needed ${n} letters, that fell short`,
   `Shy of the ${n}-letter bar`,
 ];
-const tooLongPhrases = (n: number) => [
+export const tooLongPhrases = (n: number) => [
   `Too long! The chain needed exactly ${n} letters`,
   `Needed exactly ${n} letters, that overshot`,
   `Blew past the ${n}-letter mark`,
 ];
 
-interface GameOverResponse {
+export interface GameOverResponse {
   winners: PlayerRanking[];
   awards?: Award[];
 }
@@ -222,6 +231,7 @@ interface GameOverResponse {
 export type Message =
   | GameState
   | JoinGameMessage
+  | JoinSpectateMessage
   | NewClientEvent
   | PlayerInputMessage
   | RoundOverResponse
@@ -252,6 +262,7 @@ export const EventUpdateGameOptions = "UPDATE_GAME_OPTIONS";
 export const EventEndTurn = "END_TURN";
 export const EventAllWords = "ALL_WORDS";
 export const EventChatMessage = "CHAT_MESSAGE";
+export const EventJoinSpectate = "JOIN_SPECTATE";
 export const Error = "ERROR";
 
 /** Read-only summary of the room settings so every player knows the rules */

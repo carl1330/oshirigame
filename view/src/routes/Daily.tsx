@@ -114,8 +114,10 @@ export default function Daily() {
   const fetchLeaderboard = useCallback(
     async (lang: string) => {
       try {
+        // The token lets the server include other players' words once this
+        // player has finished their own run.
         const res = await fetch(
-          `${api}/api/daily/leaderboard?language=${lang}`,
+          `${api}/api/daily/leaderboard?language=${lang}&token=${getDailyToken()}`,
         );
         const data = await res.json();
         return {
@@ -780,6 +782,11 @@ export default function Daily() {
                       <h2 className="font-display text-white/70 text-center mb-2">
                         Today's leaderboard
                       </h2>
+                      {leaderboard.some((e) => e.results?.length) && (
+                        <p className="text-white/40 text-xs text-center mb-2">
+                          Tap a player to see their words
+                        </p>
+                      )}
                       <DailyLeaderboard
                         key={language}
                         entries={leaderboard}

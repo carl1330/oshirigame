@@ -33,6 +33,7 @@ func NewHub() *hub {
 		handlers:   make(map[string]MessageHandler),
 	}
 	h.handlers[JOIN_GAME] = h.JoinRoom
+	h.handlers[JOIN_SPECTATE] = h.JoinSpectate
 	h.handlers[START_GAME] = h.StartGame
 	h.handlers[ROUND_START] = h.StartRound
 	h.handlers[PLAYER_INPUT] = h.PlayerInput
@@ -53,13 +54,19 @@ func (h *hub) Run() {
 			h.clients[client.token] = client
 			h.Unlock()
 		case client := <-h.unregister:
-			if game, ok := h.games[client.gameId]; ok {
+			h.Lock()
+			game, ok := h.games[client.gameId]
+			h.Unlock()
+			if ok {
 				game.unregister <- client
-				game.Lock()
-				if len(game.players) == 0 {
-					h.removegame <- game
+				// Nobody playing and nobody watching: drop the room. Deleted
+				// inline — sending on h.removegame from here would deadlock,
+				// this loop is its only receiver.
+				if game.IsEmpty() {
+					h.Lock()
+					delete(h.games, game.Id)
+					h.Unlock()
 				}
-				game.Unlock()
 			}
 			delete(h.clients, client.token)
 		case game := <-h.addgame:

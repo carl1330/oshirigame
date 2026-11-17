@@ -29,6 +29,9 @@ type Entry struct {
 	Username string `json:"username"`
 	Avatar   string `json:"avatar"`
 	Score    int    `json:"score"`
+	// Results are the entry's played words; only sent to viewers who have
+	// finished their own run (words must not leak mid-day to active players).
+	Results []RoundResult `json:"results,omitempty"`
 }
 
 // NewStore opens (and migrates) the sqlite database at path, creating parent
@@ -242,7 +245,7 @@ func (s *Store) GetEntry(day, language, token string) (Entry, []RoundResult, err
 // Leaderboard returns the day's top entries (ranked) and the total player count.
 func (s *Store) Leaderboard(day, language string, limit int) ([]Entry, int, error) {
 	rows, err := s.db.Query(
-		`SELECT username, avatar, score FROM daily_scores
+		`SELECT username, avatar, score, results FROM daily_scores
 		 WHERE day = ? AND language = ?
 		 ORDER BY score DESC, id ASC
 		 LIMIT ?`,
@@ -258,7 +261,11 @@ func (s *Store) Leaderboard(day, language string, limit int) ([]Entry, int, erro
 	prevScore := 0
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.Username, &e.Avatar, &e.Score); err != nil {
+		var resultsJSON string
+		if err := rows.Scan(&e.Username, &e.Avatar, &e.Score, &resultsJSON); err != nil {
+			return nil, 0, err
+		}
+		if err := json.Unmarshal([]byte(resultsJSON), &e.Results); err != nil {
 			return nil, 0, err
 		}
 		// Standard competition ranking: ties share a rank.

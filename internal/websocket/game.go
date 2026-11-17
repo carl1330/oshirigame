@@ -15,14 +15,19 @@ import (
 )
 
 type game struct {
-	Id          string `json:"id"`
-	players     map[string]*Player
-	GameState   *GameState
-	WordList    *oshirigame.WordList
-	register    chan *Player
-	unregister  chan *client
-	expire      chan *client
-	broadcast   chan *Message
+	Id        string `json:"id"`
+	players   map[string]*Player
+	// Watch-only connections (the TV view): they get every broadcast but
+	// never hold a seat in the queue. Keyed by connection, not token, so a
+	// device that is somehow both player and spectator can't collide.
+	spectators        map[*client]bool
+	GameState         *GameState
+	WordList          *oshirigame.WordList
+	register          chan *Player
+	registerSpectator chan *client
+	unregister        chan *client
+	expire            chan *client
+	broadcast         chan *Message
 	running     bool
 	roundCtx    context.Context
 	cancelRound context.CancelFunc
@@ -90,8 +95,12 @@ type Player struct {
 	Score      int    `json:"score"`
 	Lives      int    `json:"lives"`      // battle royale: remaining lives
 	Eliminated bool   `json:"eliminated"` // battle royale: out of the game
-	roundInput string // this player's word in longest-word mode
-	submitted  bool   // locked in their word this round (longest-word mode)
+	// Longest-word mode live status for spectator views: whether the player
+	// has typed anything yet, and whether they locked their word in. The
+	// word itself stays server-side so the TV can't spoil it.
+	HasRoundInput bool   `json:"hasRoundInput"`
+	Submitted     bool   `json:"submitted"`
+	roundInput    string // this player's word in longest-word mode
 	lastChatAt time.Time
 	stats      playerStats
 	client     *client
@@ -130,15 +139,17 @@ func NewGame() *game {
 	haikunator := haikunator.New()
 	haikunator.TokenLength = 0
 	return &game{
-		Id:         haikunator.Haikunate(),
-		broadcast:  make(chan *Message),
-		register:   make(chan *Player),
-		unregister: make(chan *client),
-		expire:     make(chan *client),
-		players:    make(map[string]*Player),
-		GameState:  NewGameState(),
-		WordList:   oshirigame.NewWordList(),
-		running:    false,
+		Id:                haikunator.Haikunate(),
+		broadcast:         make(chan *Message),
+		register:          make(chan *Player),
+		registerSpectator: make(chan *client),
+		unregister:        make(chan *client),
+		expire:            make(chan *client),
+		players:           make(map[string]*Player),
+		spectators:        make(map[*client]bool),
+		GameState:         NewGameState(),
+		WordList:          oshirigame.NewWordList(),
+		running:           false,
 	}
 }
 
@@ -864,7 +875,8 @@ func (g *game) ResetRoundInputs() {
 	for _, player := range g.players {
 		player.Lock()
 		player.roundInput = ""
-		player.submitted = false
+		player.HasRoundInput = false
+		player.Submitted = false
 		player.stats.submitMs = -1
 		player.Unlock()
 	}
@@ -911,7 +923,23 @@ func (g *game) Run() {
 			g.players[player.client.token] = player
 			go g.BroadcastGameState()
 			go g.SendPlayerState(player)
+		case c := <-g.registerSpectator:
+			g.Lock()
+			g.spectators[c] = true
+			g.Unlock()
+			// Catch the spectator up immediately: mid-game the letter reveal
+			// events are long gone, the shared state carries everything
+			go g.SendGameState(c)
 		case c := <-g.unregister:
+			// Spectators need no reconnect grace, a returning TV simply
+			// re-attaches with a fresh JOIN_SPECTATE
+			g.Lock()
+			if g.spectators[c] {
+				delete(g.spectators, c)
+				g.Unlock()
+				break
+			}
+			g.Unlock()
 			// Don't drop the player immediately, give them a grace period
 			// to reconnect (flaky mobile connections, page reloads).
 			if player, ok := g.players[c.token]; ok && player.GetClient() == c {
@@ -937,6 +965,14 @@ func (g *game) Run() {
 				}
 				player.Unlock()
 			}
+			g.Lock()
+			for spectator := range g.spectators {
+				select {
+				case spectator.send <- message:
+				default:
+				}
+			}
+			g.Unlock()
 		}
 	}
 }
@@ -1021,6 +1057,13 @@ func (g *game) SetLanguage(language string) {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	g.GameState.Language = language
+}
+
+// IsEmpty reports whether nobody is playing and nobody is watching.
+func (g *game) IsEmpty() bool {
+	g.Lock()
+	defer g.Unlock()
+	return len(g.players) == 0 && len(g.spectators) == 0
 }
 
 func (g *game) IsRunning() bool {
@@ -1292,7 +1335,8 @@ func (g *game) ResetToLobby() {
 		player.SetEliminated(false)
 		player.Lock()
 		player.roundInput = ""
-		player.submitted = false
+		player.HasRoundInput = false
+		player.Submitted = false
 		player.Unlock()
 		if !queued[player.token] {
 			benched = append(benched, player)
@@ -1461,13 +1505,20 @@ func (p *Player) GetPlayerScore() int {
 	return p.Score
 }
 
-func (p *Player) SetRoundInput(input string) {
+// SetRoundInput stores the player's hidden word and reports whether the
+// "has typed anything" status flipped (callers broadcast on a flip so
+// spectator views can show live typing states without keystroke spam).
+func (p *Player) SetRoundInput(input string) (statusChanged bool) {
 	p.Lock()
 	defer p.Unlock()
-	if p.submitted {
-		return
+	if p.Submitted {
+		return false
 	}
 	p.roundInput = input
+	hasInput := input != ""
+	statusChanged = hasInput != p.HasRoundInput
+	p.HasRoundInput = hasInput
+	return statusChanged
 }
 
 func (p *Player) GetRoundInput() string {
@@ -1479,13 +1530,13 @@ func (p *Player) GetRoundInput() string {
 func (p *Player) SetSubmitted(submitted bool) {
 	p.Lock()
 	defer p.Unlock()
-	p.submitted = submitted
+	p.Submitted = submitted
 }
 
 func (p *Player) GetSubmitted() bool {
 	p.Lock()
 	defer p.Unlock()
-	return p.submitted
+	return p.Submitted
 }
 
 // RecordTurn folds one finished turn into the player's game stats.

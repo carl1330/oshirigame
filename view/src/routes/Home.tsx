@@ -2,7 +2,7 @@ import "react-toastify/dist/ReactToastify.css";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";
 import { getHttpConfig } from "../misc/server.conf";
-import { FaCalendarDay, FaPlay, FaSignInAlt } from "react-icons/fa";
+import { FaCalendarDay, FaPlay, FaSignInAlt, FaTv } from "react-icons/fa";
 import { useState } from "react";
 import TileLoader from "../components/TileLoader";
 import { motion } from "framer-motion";
@@ -30,8 +30,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [roomCode, setRoomCode] = useState("");
 
-  async function handleCreateRoom(e: React.MouseEvent<HTMLButtonElement>) {
-    e.preventDefault();
+  // Shared create flow: a TV room is an ordinary room, the TV just attaches
+  // to it as a spectator instead of taking a seat
+  async function createRoom(routePrefix: "/room/" | "/tv/") {
     if (loading) return;
     setLoading(true);
     try {
@@ -43,12 +44,22 @@ export default function Home() {
       if (!data.id) {
         throw new Error("creategame returned no room id");
       }
-      navigate("/room/" + data.id);
+      navigate(routePrefix + data.id);
     } catch (err) {
       console.error(err);
       toast.error("Could not create a room. Please try again.");
       setLoading(false);
     }
+  }
+
+  async function handleCreateRoom(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    await createRoom("/room/");
+  }
+
+  async function handleCreateTvRoom(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    await createRoom("/tv/");
   }
 
   function handleJoinRoom(e: React.FormEvent) {
@@ -101,6 +112,17 @@ export default function Home() {
             >
               <FaCalendarDay aria-hidden />
               <span className="text-lg">Daily challenge</span>
+            </Button>
+            {/* TV mode: this screen becomes the shared display, players
+                join from their phones via QR (Jackbox-style) */}
+            <Button
+              variant="secondary"
+              className="flex items-center justify-center gap-3 px-8"
+              onClick={handleCreateTvRoom}
+              disabled={loading}
+            >
+              <FaTv aria-hidden />
+              <span className="text-lg">TV mode</span>
             </Button>
 
             {/* Join an existing room by code or pasted invite link */}

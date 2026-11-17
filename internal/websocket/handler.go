@@ -19,6 +19,7 @@ var upgrader = websocket.Upgrader{
 
 const (
 	JOIN_GAME           = "JOIN_GAME"
+	JOIN_SPECTATE       = "JOIN_SPECTATE"
 	START_GAME          = "START_GAME"
 	ROUND_START         = "ROUND_START"
 	ROUND_ATAMA         = "ROUND_ATAMA"
@@ -53,6 +54,10 @@ type JoinRoomMessage struct {
 	Username string
 	Token    string
 	Avatar   string
+}
+
+type JoinSpectateMessage struct {
+	Id string
 }
 
 type StartGameMessage struct {
@@ -251,6 +256,34 @@ func (h *hub) JoinRoom(m *Message, c *client) error {
 	return nil
 }
 
+// JoinSpectate attaches a watch-only client (the TV view) to a room: it
+// receives every broadcast but never takes a seat in the player queue, so it
+// can't become host, leader, or a turn. Unlike players, spectators may attach
+// mid-game.
+func (h *hub) JoinSpectate(m *Message, c *client) error {
+	var joinSpectateMessage JoinSpectateMessage
+	err := json.Unmarshal(m.Data, &joinSpectateMessage)
+
+	if err != nil {
+		return fmt.Errorf("error unmarshalling message data")
+	}
+
+	game, err := h.GetGame(joinSpectateMessage.Id)
+
+	if err != nil {
+		c.send <- &Message{
+			Type: ROOM_NOT_FOUND,
+			Data: []byte(`{}`),
+		}
+		return err
+	}
+
+	c.SetClientGameId(game.Id)
+	game.registerSpectator <- c
+
+	return nil
+}
+
 func (h *hub) StartGame(m *Message, c *client) error {
 	var startGameMessage StartGameMessage
 	err := json.Unmarshal(m.Data, &startGameMessage)
@@ -355,7 +388,11 @@ func (h *hub) PlayerInput(m *Message, c *client) error {
 		if len([]rune(input)) > 45 {
 			input = string([]rune(input)[:45])
 		}
-		player.SetRoundInput(input)
+		// Only the waiting/typing status is shared (the word stays hidden),
+		// and only status flips broadcast, so no per-keystroke spam
+		if player.SetRoundInput(input) {
+			game.BroadcastGameState()
+		}
 		return nil
 	}
 
@@ -429,6 +466,9 @@ func (h *hub) EndTurn(m *Message, c *client) error {
 		player.SetSubmitted(true)
 		if game.AllSubmitted() {
 			game.EndTurnEarly()
+		} else {
+			// Spectator views track who has locked in
+			game.BroadcastGameState()
 		}
 		return nil
 	}

@@ -17,6 +17,8 @@ interface PlayerStageProps {
   copied: boolean;
   /** Live chat bubbles, keyed by username */
   bubbles?: Record<string, Bubble>;
+  /** TV mode: nobody can tap the screen, empty seats are purely visual */
+  readOnly?: boolean;
 }
 
 const ROOM_SOFT_CAP = 8;
@@ -71,26 +73,43 @@ export default function PlayerStage(props: PlayerStageProps) {
             </AnimatePresence>
           </motion.div>
         ))}
-        {Array.from({ length: emptySeats }).map((_, i) => (
-          <motion.button
-            key={`seat-${i}`}
-            type="button"
-            onClick={props.onInvite}
-            aria-label="Copy invite link"
-            initial={{ scale: 0.4, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.4, opacity: 0 }}
-            transition={SEAT_SPRING}
-            className="flex flex-col items-center gap-1.5 w-20 sm:w-24 group"
-          >
-            <span className="w-[72px] h-[72px] rounded-full border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 text-3xl font-display group-hover:border-violet-400/60 group-hover:text-violet-300 transition-colors">
-              +
-            </span>
-            <span className="text-white/40 text-xs group-hover:text-violet-300 transition-colors">
-              {props.copied ? "Link copied!" : "Invite"}
-            </span>
-          </motion.button>
-        ))}
+        {Array.from({ length: emptySeats }).map((_, i) =>
+          props.readOnly ? (
+            <motion.div
+              key={`seat-${i}`}
+              aria-hidden
+              initial={{ scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.4, opacity: 0 }}
+              transition={SEAT_SPRING}
+              className="flex flex-col items-center gap-1.5 w-20 sm:w-24"
+            >
+              <span className="w-[72px] h-[72px] rounded-full border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 text-3xl font-display">
+                +
+              </span>
+              <span className="text-white/40 text-xs">Seat open</span>
+            </motion.div>
+          ) : (
+            <motion.button
+              key={`seat-${i}`}
+              type="button"
+              onClick={props.onInvite}
+              aria-label="Copy invite link"
+              initial={{ scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.4, opacity: 0 }}
+              transition={SEAT_SPRING}
+              className="flex flex-col items-center gap-1.5 w-20 sm:w-24 group"
+            >
+              <span className="w-[72px] h-[72px] rounded-full border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 text-3xl font-display group-hover:border-violet-400/60 group-hover:text-violet-300 transition-colors">
+                +
+              </span>
+              <span className="text-white/40 text-xs group-hover:text-violet-300 transition-colors">
+                {props.copied ? "Link copied!" : "Invite"}
+              </span>
+            </motion.button>
+          )
+        )}
       </AnimatePresence>
     </div>
   );
