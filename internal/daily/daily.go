@@ -18,7 +18,16 @@ const (
 	// minWordCombinations mirrors the classic-mode default so daily letter
 	// pairs are never unreasonably hard.
 	minWordCombinations = 400
+	// GraceSeconds of slack on server-side deadlines, to absorb network
+	// latency between the client timer and the lock-in request.
+	GraceSeconds = 3
 )
+
+// RoundDeadline is when a round closes, counted from when its clock was
+// started (the player advances between rounds at their own pace).
+func RoundDeadline(roundStartedAt int64) int64 {
+	return roundStartedAt + int64(RoundTime)
+}
 
 type Combo struct {
 	Atama  string `json:"atama"`

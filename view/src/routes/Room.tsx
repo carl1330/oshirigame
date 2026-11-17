@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import useWebSocket from "react-use-websocket";
-import { Oval } from "react-loader-spinner";
+import TileLoader from "../components/TileLoader";
 import { getWsConfig } from "../misc/server.conf";
 import { useLocalStorage } from "usehooks-ts";
 import Button from "../components/Button";
@@ -1550,7 +1550,7 @@ export default function Room() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="dialog-backdrop" aria-hidden="true" />
           <div className="dialog-panel relative flex flex-col items-center gap-4 max-w-xs text-center">
-            <Oval color="#a78bfa" secondaryColor="#4c1d95" width={48} height={48} />
+            <TileLoader size="lg" letters="···" label="Reconnecting" />
             <p className="font-display font-semibold text-lg">Reconnecting…</p>
             <p className="text-white/60 text-sm">
               Connection lost. Hang tight, your spot in the game is saved for

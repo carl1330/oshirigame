@@ -49,6 +49,9 @@ func main() {
 	// Daily endpoints live under /api so they never shadow the SPA's
 	// /daily page route (a browser refresh on /daily must get index.html).
 	r.Get("/api/daily", dailyHandler.GetChallenge)
+	r.Post("/api/daily/start", dailyHandler.Start)
+	r.Post("/api/daily/word", dailyHandler.LockWord)
+	r.Post("/api/daily/next", dailyHandler.NextRound)
 	r.Post("/api/daily/submit", dailyHandler.Submit)
 	r.Get("/api/daily/leaderboard", dailyHandler.Leaderboard)
 

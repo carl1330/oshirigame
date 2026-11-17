@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { getHttpConfig } from "../misc/server.conf";
 import { FaCalendarDay, FaPlay, FaSignInAlt } from "react-icons/fa";
 import { useState } from "react";
-import { Oval } from "react-loader-spinner";
+import TileLoader from "../components/TileLoader";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 
@@ -86,7 +86,7 @@ export default function Home() {
               disabled={loading}
             >
               {loading ? (
-                <Oval color="#ffffff" width={25} height={25} />
+                <TileLoader size="sm" letters="···" label="Creating room" />
               ) : (
                 <>
                   <FaPlay aria-hidden />

@@ -8,6 +8,8 @@ import wordFailureSound from "../../public/sounds/error_003.ogg";
 interface LetterBoxProps {
   wordAccepted: boolean;
   text: string;
+  /** Points the word earned; shown next to the verdict when provided */
+  score?: number;
 }
 
 export default function LetterBoxFinished(props: LetterBoxProps) {
@@ -38,7 +40,7 @@ export default function LetterBoxFinished(props: LetterBoxProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      <div className="flex flex-wrap gap-1 justify-center">
+      <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-center">
         {props.text.length > 0 ? (
           props.text.split("").map((letter, index) => (
             <motion.div
@@ -67,6 +69,9 @@ export default function LetterBoxFinished(props: LetterBoxProps) {
         {props.wordAccepted ? (
           <>
             <FaCheckCircle aria-hidden /> Word accepted!
+            {props.score !== undefined && (
+              <span className="text-violet-300">+{props.score} pts</span>
+            )}
           </>
         ) : (
           <>

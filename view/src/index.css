@@ -169,6 +169,16 @@ body {
       inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
 
+  /* Loading keycap: same depth trick as .tile, pressed in a wave by the
+     cap-wave animation. --cap-drop is set per size by TileLoader. */
+  .loader-cap {
+    background: linear-gradient(180deg, #343447 0%, #262636 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 var(--cap-drop, 4px) 0 #15151f, 0 6px 12px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    animation: cap-wave 1.1s ease-in-out infinite;
+  }
+
   /* Full-screen pause takeover (GameMenu) */
   .pause-backdrop {
     @apply fixed inset-0 z-50;
@@ -209,6 +219,23 @@ body {
     background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
     box-shadow: 0 4px 0 #7f1d1d, 0 6px 16px rgba(239, 68, 68, 0.4),
       inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* Each cap gets pressed early in the cycle, then rests; staggered
+   animation-delay per cap turns it into a typing wave. */
+@keyframes cap-wave {
+  0%,
+  30%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 var(--cap-drop, 4px) 0 #15151f, 0 6px 12px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  15% {
+    transform: translateY(var(--cap-drop, 4px));
+    box-shadow: 0 0 0 #15151f, 0 2px 6px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 }
 

@@ -78,39 +78,142 @@ func TestStoreAndHandlers(t *testing.T) {
 		t.Fatalf("unexpected challenge: %+v", challenge)
 	}
 
-	// Find a valid word for round 1 to guarantee a nonzero score
-	wl := oshirigame.GetWordList(oshirigame.English)
-	firstWord := wl.AllWords(challenge.Combos[0].Atama, challenge.Combos[0].Oshiri)[0]
+	// Submitting without a started run is rejected
+	noRunBody, _ := json.Marshal(submitRequest{Token: "test-token-123", Language: "english"})
+	rec = httptest.NewRecorder()
+	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(noRunBody)))
+	if rec.Code != 400 {
+		t.Fatalf("expected 400 submitting without a run, got %d", rec.Code)
+	}
 
-	words := make([]string, Rounds)
-	words[0] = firstWord
-	body, _ := json.Marshal(submitRequest{
-		Token: "test-token-123", Username: "carl", Language: "english", Words: words,
+	// Start a run
+	startBody, _ := json.Marshal(startRequest{
+		Token: "test-token-123", Username: "carl", Language: "english",
 	})
 	rec = httptest.NewRecorder()
-	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(body)))
+	h.Start(rec, httptest.NewRequest("POST", "/daily/start", bytes.NewReader(startBody)))
+	if rec.Code != 200 {
+		t.Fatalf("start failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var started startResponse
+	json.Unmarshal(rec.Body.Bytes(), &started)
+
+	// Starting again resumes the same run instead of resetting the clock
+	rec = httptest.NewRecorder()
+	h.Start(rec, httptest.NewRequest("POST", "/daily/start", bytes.NewReader(startBody)))
+	var restarted startResponse
+	json.Unmarshal(rec.Body.Bytes(), &restarted)
+	if restarted.StartedAt != started.StartedAt {
+		t.Fatalf("restart changed startedAt: %d vs %d", restarted.StartedAt, started.StartedAt)
+	}
+
+	// Challenge now reports the in-progress run
+	rec = httptest.NewRecorder()
+	h.GetChallenge(rec, httptest.NewRequest("GET", "/daily?language=english&token=test-token-123", nil))
+	json.Unmarshal(rec.Body.Bytes(), &challenge)
+	if challenge.Played || challenge.Run == nil || challenge.Run.StartedAt != started.StartedAt {
+		t.Fatalf("expected in-progress run in challenge, got %+v", challenge)
+	}
+
+	// Lock a valid word for round 0 to guarantee a nonzero score
+	wl := oshirigame.GetWordList(oshirigame.English)
+	firstWord := wl.AllWords(challenge.Combos[0].Atama, challenge.Combos[0].Oshiri)[0]
+	lockBody, _ := json.Marshal(lockRequest{
+		Token: "test-token-123", Language: "english", Round: 0, Word: firstWord,
+	})
+	rec = httptest.NewRecorder()
+	h.LockWord(rec, httptest.NewRequest("POST", "/daily/word", bytes.NewReader(lockBody)))
+	if rec.Code != 200 {
+		t.Fatalf("lock failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var verdict RoundResult
+	json.Unmarshal(rec.Body.Bytes(), &verdict)
+	if !verdict.Accepted || verdict.Score <= 0 {
+		t.Fatalf("expected %q accepted, got %+v", firstWord, verdict)
+	}
+
+	// Locking the same round again cannot change the stored word
+	relockBody, _ := json.Marshal(lockRequest{
+		Token: "test-token-123", Language: "english", Round: 0, Word: "",
+	})
+	rec = httptest.NewRecorder()
+	h.LockWord(rec, httptest.NewRequest("POST", "/daily/word", bytes.NewReader(relockBody)))
+	var relocked RoundResult
+	json.Unmarshal(rec.Body.Bytes(), &relocked)
+	if !relocked.Accepted || relocked.Word != verdict.Word {
+		t.Fatalf("relock changed stored verdict: %+v", relocked)
+	}
+
+	// Locking a round whose clock hasn't been started is rejected
+	earlyBody, _ := json.Marshal(lockRequest{
+		Token: "test-token-123", Language: "english", Round: 1, Word: firstWord,
+	})
+	rec = httptest.NewRecorder()
+	h.LockWord(rec, httptest.NewRequest("POST", "/daily/word", bytes.NewReader(earlyBody)))
+	if rec.Code != 400 {
+		t.Fatalf("expected 400 locking unstarted round, got %d", rec.Code)
+	}
+
+	// Advance to round 1: its clock starts now
+	nextBody, _ := json.Marshal(nextRequest{Token: "test-token-123", Language: "english"})
+	rec = httptest.NewRecorder()
+	h.NextRound(rec, httptest.NewRequest("POST", "/daily/next", bytes.NewReader(nextBody)))
+	if rec.Code != 200 {
+		t.Fatalf("next failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var next nextResponse
+	json.Unmarshal(rec.Body.Bytes(), &next)
+	if next.Round != 1 {
+		t.Fatalf("expected round 1, got %+v", next)
+	}
+
+	// A word arriving after the round's deadline scores zero
+	realNow := h.now
+	h.now = func() int64 { return next.RoundStartedAt + int64(RoundTime) + GraceSeconds + 1 }
+	rec = httptest.NewRecorder()
+	h.LockWord(rec, httptest.NewRequest("POST", "/daily/word", bytes.NewReader(earlyBody)))
+	var late RoundResult
+	json.Unmarshal(rec.Body.Bytes(), &late)
+	if late.Accepted || late.Word != "" {
+		t.Fatalf("expected late word rejected, got %+v", late)
+	}
+	h.now = realNow
+
+	// Submit finalizes from the stored run
+	rec = httptest.NewRecorder()
+	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(noRunBody)))
 	if rec.Code != 200 {
 		t.Fatalf("submit failed: %d %s", rec.Code, rec.Body.String())
 	}
 	var submitted submitResponse
 	json.Unmarshal(rec.Body.Bytes(), &submitted)
-	if submitted.Score <= 0 || submitted.Rank != 1 || !submitted.Results[0].Accepted {
+	if submitted.Score != verdict.Score || submitted.Rank != 1 || !submitted.Results[0].Accepted {
 		t.Fatalf("unexpected submit response: %+v", submitted)
 	}
 
 	// Second submission with the same token must be rejected
 	rec = httptest.NewRecorder()
-	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(body)))
+	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(noRunBody)))
 	if rec.Code != 409 {
 		t.Fatalf("expected 409 on replay, got %d", rec.Code)
 	}
 
+	// Starting again after playing must be rejected
+	rec = httptest.NewRecorder()
+	h.Start(rec, httptest.NewRequest("POST", "/daily/start", bytes.NewReader(startBody)))
+	if rec.Code != 409 {
+		t.Fatalf("expected 409 starting after playing, got %d", rec.Code)
+	}
+
 	// Lower-scoring second player ranks below
-	body2, _ := json.Marshal(submitRequest{
-		Token: "test-token-456", Username: "rival", Language: "english", Words: make([]string, Rounds),
+	start2, _ := json.Marshal(startRequest{
+		Token: "test-token-456", Username: "rival", Language: "english",
 	})
 	rec = httptest.NewRecorder()
-	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(body2)))
+	h.Start(rec, httptest.NewRequest("POST", "/daily/start", bytes.NewReader(start2)))
+	submit2, _ := json.Marshal(submitRequest{Token: "test-token-456", Language: "english"})
+	rec = httptest.NewRecorder()
+	h.Submit(rec, httptest.NewRequest("POST", "/daily/submit", bytes.NewReader(submit2)))
 	var second submitResponse
 	json.Unmarshal(rec.Body.Bytes(), &second)
 	if second.Rank != 2 {
@@ -134,5 +237,10 @@ func TestStoreAndHandlers(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &challenge)
 	if !challenge.Played || challenge.Entry == nil || challenge.Entry.Rank != 1 {
 		t.Fatalf("expected played entry, got %+v", challenge)
+	}
+	// The day's answers come back so a return visit can show them
+	if len(challenge.Results) != Rounds || challenge.Results[0].Word != firstWord ||
+		!challenge.Results[0].Accepted {
+		t.Fatalf("expected stored answers in challenge, got %+v", challenge.Results)
 	}
 }
