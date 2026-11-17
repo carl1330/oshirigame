@@ -77,6 +77,7 @@ type GameOptionsUpdateMessage struct {
 	SubmitOnEnter       bool
 	Lives               int
 	SwapTurns           int
+	Mutation            string
 }
 
 type AllWordsResponse struct {
@@ -95,6 +96,7 @@ type RoundOverResponse struct {
 	// the length it had to reach, and who (if anyone) got knocked out.
 	TurnUsername     string `json:"turnUsername,omitempty"`
 	TooShort         bool   `json:"tooShort,omitempty"`
+	TooLong          bool   `json:"tooLong,omitempty"`
 	NeededLength     int    `json:"neededLength,omitempty"`
 	EliminatedPlayer string `json:"eliminatedPlayer,omitempty"`
 	// Seconds until the server starts the next turn on its own (0 = it won't,
@@ -394,6 +396,7 @@ func (h *hub) UpdateGameOptions(m *Message, c *client) error {
 	game.SetSubmitOnEnter(gameOptionsUpdateMessage.SubmitOnEnter)
 	game.SetLives(gameOptionsUpdateMessage.Lives)
 	game.SetSwapTurns(gameOptionsUpdateMessage.SwapTurns)
+	game.SetMutation(gameOptionsUpdateMessage.Mutation)
 
 	game.BroadcastGameState()
 

@@ -57,6 +57,8 @@ export type GameState = {
   lives: number;
   /** Battle royale: turns per letter combination */
   swapTurns: number;
+  /** Battle royale: chain rule mutation ("" = none, "exactLength") */
+  mutation: string;
   /** Battle royale: minimum letters the next word must have (0 = any) */
   requiredLength: number;
   /** Battle royale: turns left before the letters swap */
@@ -121,6 +123,7 @@ export interface GameOptionsEvent {
   submitOnEnter: boolean;
   lives: number;
   swapTurns: number;
+  mutation: string;
 }
 
 interface AllWordsResponse {
@@ -147,6 +150,8 @@ interface RoundOverResponse {
   turnUsername?: string;
   /** Battle royale: valid word, but shorter than the chain required */
   tooShort?: boolean;
+  /** Battle royale (exact length mutation): valid word, but too long */
+  tooLong?: boolean;
   /** Battle royale: length the word had to reach */
   neededLength?: number;
   /** Battle royale: player knocked out this turn */
@@ -160,6 +165,7 @@ interface RoyaleResult {
   turnUsername: string;
   accepted: boolean;
   tooShort: boolean;
+  tooLong: boolean;
   neededLength: number;
   eliminatedPlayer?: string;
   /** Random seed fixed per result so the phrasing varies turn to turn but
@@ -201,6 +207,11 @@ const tooShortPhrases = (n: number) => [
   `Too short! The chain needed ${n} letters`,
   `Needed ${n} letters, that fell short`,
   `Shy of the ${n}-letter bar`,
+];
+const tooLongPhrases = (n: number) => [
+  `Too long! The chain needed exactly ${n} letters`,
+  `Needed exactly ${n} letters, that overshot`,
+  `Blew past the ${n}-letter mark`,
 ];
 
 interface GameOverResponse {
@@ -260,6 +271,9 @@ function SettingsSummary({ gameState }: { gameState: GameState }) {
   ];
   if (isRoyale) {
     items.push(`New letters every ${gameState.swapTurns} turns`);
+    if (gameState.mutation === "exactLength") {
+      items.push("Mutation: exactly one letter longer");
+    }
   }
   if (gameState.bannedAtama) {
     items.push(`Never starts with ${gameState.bannedAtama.toUpperCase()}`);
@@ -640,6 +654,7 @@ export default function Room() {
             turnUsername: gameStateFinished.turnUsername ?? "",
             accepted: gameStateFinished.wordAccepted,
             tooShort: gameStateFinished.tooShort ?? false,
+            tooLong: gameStateFinished.tooLong ?? false,
             neededLength: gameStateFinished.neededLength ?? 0,
             eliminatedPlayer: gameStateFinished.eliminatedPlayer,
             seed: Math.random(),
@@ -1124,7 +1139,9 @@ export default function Room() {
                   >
                     <p className="text-white font-display font-semibold text-sm sm:text-base">
                       {gameState.requiredLength > 0
-                        ? `Beat the chain: at least ${gameState.requiredLength} letters`
+                        ? gameState.mutation === "exactLength"
+                          ? `Match the chain: exactly ${gameState.requiredLength} letters`
+                          : `Beat the chain: at least ${gameState.requiredLength} letters`
                         : "Any valid word starts the chain"}
                     </p>
                     <p className="text-white/60 text-sm">
@@ -1263,7 +1280,10 @@ export default function Room() {
                   <p className="text-white font-display font-semibold">
                     {royaleResult.turnUsername}{" "}
                     {vary(CHAIN_ALIVE_PHRASES, royaleResult.seed)} Next word
-                    needs at least {gameState.requiredLength} letters.
+                    needs {gameState.mutation === "exactLength"
+                      ? "exactly"
+                      : "at least"}{" "}
+                    {gameState.requiredLength} letters.
                   </p>
                 ) : (
                   <div className="flex flex-col items-center gap-1 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/40">
@@ -1271,6 +1291,11 @@ export default function Room() {
                       {royaleResult.tooShort
                         ? vary(
                             tooShortPhrases(royaleResult.neededLength),
+                            royaleResult.seed
+                          )
+                        : royaleResult.tooLong
+                        ? vary(
+                            tooLongPhrases(royaleResult.neededLength),
                             royaleResult.seed
                           )
                         : vary(NOT_A_WORD_PHRASES, royaleResult.seed)}
@@ -1488,6 +1513,7 @@ export default function Room() {
                     currentSubmitOnEnter={gameState.submitOnEnter}
                     currentLives={gameState.lives}
                     currentSwapTurns={gameState.swapTurns}
+                    currentMutation={gameState.mutation}
                     isOpen={gamePropsOpen}
                     setIsOpen={setGamePropsOpen}
                     sendEvent={sendEvent}

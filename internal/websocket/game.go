@@ -44,6 +44,12 @@ const (
 	GameModeRoyale  = "royale"
 )
 
+// Battle royale mutations tweak the chain rule.
+const (
+	MutationNone        = ""
+	MutationExactLength = "exactLength" // each word must be exactly one letter longer than the last
+)
+
 type GameState struct {
 	Started          bool      `json:"started"`
 	GameMode         string    `json:"gameMode"`
@@ -58,6 +64,7 @@ type GameState struct {
 	SubmitOnEnter    bool      `json:"submitOnEnter"`
 	Lives            int       `json:"lives"`     // battle royale: starting lives
 	SwapTurns        int       `json:"swapTurns"` // battle royale: turns per letter combination
+	Mutation         string    `json:"mutation"`  // battle royale: chain rule mutation
 	RequiredLength   int       `json:"requiredLength"`
 	SwapIn           int       `json:"swapIn"` // battle royale: turns left on current letters
 	PlayerQueue      []*Player `json:"playerQueue"`
@@ -150,6 +157,7 @@ func NewGameState() *GameState {
 		SubmitOnEnter:     false,
 		Lives:             3,
 		SwapTurns:         5,
+		Mutation:          MutationNone,
 		RequiredLength:    0,
 		SwapIn:            0,
 		PlayerQueue:       make([]*Player, 0),
@@ -484,7 +492,8 @@ func (g *game) FinishRound() {
 }
 
 // FinishRoyaleRound resolves one battle royale turn: the word must be valid
-// AND longer than the previous word in the chain, or the player loses a life.
+// AND longer than the previous word in the chain (with the exact-length
+// mutation, exactly one letter longer), or the player loses a life.
 // At zero lives the player is eliminated; the last one standing wins.
 func (g *game) FinishRoyaleRound() {
 	g.GameState.Lock()
@@ -500,6 +509,7 @@ func (g *game) FinishRoyaleRound() {
 	g.GameState.Lock()
 	input := g.GameState.Input
 	needed := g.GameState.RequiredLength
+	mutation := g.GameState.Mutation
 	turn := g.GameState.Round
 	g.GameState.Unlock()
 
@@ -507,7 +517,8 @@ func (g *game) FinishRoyaleRound() {
 	wordLen := len([]rune(word))
 	valid := input != "" && g.WordList.IsValidWord(word)
 	tooShort := valid && needed > 0 && wordLen < needed
-	accepted := valid && !tooShort
+	tooLong := valid && needed > 0 && mutation == MutationExactLength && wordLen > needed
+	accepted := valid && !tooShort && !tooLong
 
 	player.RecordTurn(word, accepted, g.roundElapsedMs())
 
@@ -570,6 +581,7 @@ func (g *game) FinishRoyaleRound() {
 	roundOverResponse.Word = word
 	roundOverResponse.WordAccepted = accepted
 	roundOverResponse.TooShort = tooShort
+	roundOverResponse.TooLong = tooLong
 	roundOverResponse.NeededLength = needed
 	roundOverResponse.TurnUsername = player.Username
 	if eliminated {
@@ -1344,6 +1356,17 @@ func (g *game) SetSwapTurns(turns int) {
 	g.GameState.Lock()
 	defer g.GameState.Unlock()
 	g.GameState.SwapTurns = turns
+}
+
+// SetMutation sets the battle royale chain rule mutation; unknown values
+// fall back to no mutation.
+func (g *game) SetMutation(mutation string) {
+	if mutation != MutationExactLength {
+		mutation = MutationNone
+	}
+	g.GameState.Lock()
+	defer g.GameState.Unlock()
+	g.GameState.Mutation = mutation
 }
 
 func (g *game) SetRoundTime(time int) {

@@ -3,6 +3,8 @@ import Button from "./Button";
 import React, { useEffect, useState } from "react";
 import {
   FaCrown,
+  FaDice,
+  FaEquals,
   FaMinus,
   FaPlus,
   FaRulerHorizontal,
@@ -25,6 +27,7 @@ interface GameOptionsDialogProps {
   currentSubmitOnEnter: boolean;
   currentLives: number;
   currentSwapTurns: number;
+  currentMutation: string;
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
   sendEvent: (eventType: string, payload: Message | null) => void;
@@ -118,6 +121,23 @@ const gameModes = [
   },
 ];
 
+// Battle royale chain rule mutations. "None" is a first-class choice so the
+// group reads as a complete picker, and new mutations only need a new entry.
+const mutations = [
+  {
+    value: "",
+    label: "None",
+    icon: FaDice,
+    description: "Any word longer than the last keeps the chain alive",
+  },
+  {
+    value: "exactLength",
+    label: "Exact length",
+    icon: FaEquals,
+    description: "Words must grow by exactly one letter — no overshooting",
+  },
+];
+
 export default function GameOptionsDialog(props: GameOptionsDialogProps) {
   const [maxRounds, setMaxRounds] = useState(props.currentMaxRounds);
   const [roundTime, setRoundTime] = useState(props.currentRoundTime);
@@ -131,6 +151,7 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
   const [submitOnEnter, setSubmitOnEnter] = useState(props.currentSubmitOnEnter);
   const [lives, setLives] = useState(props.currentLives);
   const [swapTurns, setSwapTurns] = useState(props.currentSwapTurns);
+  const [mutation, setMutation] = useState(props.currentMutation);
 
   // Re-sync from live game state each time the dialog opens
   useEffect(() => {
@@ -145,6 +166,7 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
       setSubmitOnEnter(props.currentSubmitOnEnter);
       setLives(props.currentLives);
       setSwapTurns(props.currentSwapTurns);
+      setMutation(props.currentMutation);
     }
   }, [props.isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -167,6 +189,7 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
       submitOnEnter: submitOnEnter,
       lives: lives,
       swapTurns: swapTurns,
+      mutation: mutation,
     };
     props.sendEvent(EventUpdateGameOptions, newOptions);
     props.setIsOpen(false);
@@ -292,6 +315,51 @@ export default function GameOptionsDialog(props: GameOptionsDialogProps) {
                 </div>
               </div>
             </div>
+
+            {/* Battle royale chain rule mutation, same card language as the
+                game mode picker so it reads as one system */}
+            {gameMode === "royale" && (
+              <div role="radiogroup" aria-label="Mutation">
+                <span className="field-label">Mutation</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {mutations.map((m) => {
+                    const selected = mutation === m.value;
+                    const Icon = m.icon;
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setMutation(m.value)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${
+                          selected
+                            ? "bg-violet-500/15 border-violet-400/60"
+                            : "bg-surface-sunken border-white/10 hover:border-white/25"
+                        }`}
+                      >
+                        <span
+                          className={`tile w-10 h-10 text-base rounded-lg flex-shrink-0 ${
+                            selected ? "tile-anchor" : ""
+                          }`}
+                          aria-hidden
+                        >
+                          <Icon className="text-base" />
+                        </span>
+                        <span className="flex flex-col items-start">
+                          <span className="text-sm font-semibold text-white/90 font-display">
+                            {m.label}
+                          </span>
+                          <span className="text-sm text-white/60">
+                            {m.description}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
               <div>
