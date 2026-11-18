@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/carl1330/oshirigame/internal/daily"
+	"github.com/carl1330/oshirigame/internal/oshirigame"
 	"github.com/carl1330/oshirigame/internal/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -24,6 +25,14 @@ func main() {
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 	}))
+
+	// Word lists are downloaded (or read from the local cache) before the
+	// server accepts traffic, so a game never starts with an empty list.
+	fmt.Println("Loading word lists...")
+	if err := oshirigame.Preload(); err != nil {
+		fmt.Fprintln(os.Stderr, "could not load word lists:", err)
+		os.Exit(1)
+	}
 
 	hub := websocket.NewHub()
 	handler := websocket.NewHandler(hub)

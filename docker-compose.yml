@@ -8,6 +8,8 @@ services:
     environment:
       # Daily-mode leaderboard lives in an embedded sqlite database on this volume
       - DB_PATH=/data/oshirigame.db
+      # Downloaded dictionaries are cached here so restarts work offline
+      - WORDLIST_DIR=/data/wordlists
     volumes:
       - oshirigame-data:/data
     restart: unless-stopped

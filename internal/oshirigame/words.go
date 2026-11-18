@@ -2,15 +2,17 @@ package oshirigame
 
 import (
 	"bufio"
-	"embed"
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
-
-//go:embed wordlists/words_alpha.txt wordlists/words_swedish.txt
-var wordFiles embed.FS
 
 type Language string
 
@@ -19,10 +21,15 @@ const (
 	Swedish Language = "swedish"
 )
 
-var languageFiles = map[Language]string{
-	English: "wordlists/words_alpha.txt",
-	Swedish: "wordlists/words_swedish.txt",
-}
+// Word lists are downloaded on startup rather than shipped in the binary.
+// English uses the ENABLE list (public domain, built for word games).
+// Swedish is expanded from the ONLYOFFICE sv_SE hunspell dictionary
+// (LGPL-3.0, maintained by Göran Andersson).
+const (
+	enableURL = "https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt"
+	svDicURL  = "https://raw.githubusercontent.com/ONLYOFFICE/dictionaries/master/sv_SE/sv_SE.dic"
+	svAffURL  = "https://raw.githubusercontent.com/ONLYOFFICE/dictionaries/master/sv_SE/sv_SE.aff"
+)
 
 var alphabets = map[Language]string{
 	English: "abcdefghijklmnopqrstuvwxyz",
@@ -39,8 +46,11 @@ type WordList struct {
 }
 
 func IsValidLanguage(language string) bool {
-	_, ok := languageFiles[Language(language)]
-	return ok
+	switch Language(language) {
+	case English, Swedish:
+		return true
+	}
+	return false
 }
 
 func Alphabet(language Language) string {
@@ -50,18 +60,26 @@ func Alphabet(language Language) string {
 	return alphabets[English]
 }
 
+// Preload downloads and builds every word list. Call it once on startup so
+// the server fails fast when a list cannot be fetched, instead of handing
+// out empty lists mid-game.
+func Preload() error {
+	for _, language := range []Language{English, Swedish} {
+		if _, err := loadWordList(language); err != nil {
+			return fmt.Errorf("loading %s word list: %w", language, err)
+		}
+	}
+	return nil
+}
+
 // GetWordList returns the shared word list for a language, loading it once.
 func GetWordList(language Language) *WordList {
-	wordListCacheMu.Lock()
-	defer wordListCacheMu.Unlock()
-	if wl, ok := wordListCache[language]; ok {
-		return wl
+	wl, err := loadWordList(language)
+	if err != nil {
+		// Callers have no error path; Preload on startup is the real guard.
+		fmt.Fprintln(os.Stderr, "Error loading word list:", err)
+		return &WordList{Words: make(map[string]bool)}
 	}
-	wl := &WordList{
-		Words: make(map[string]bool),
-	}
-	FillWordList(wl, language)
-	wordListCache[language] = wl
 	return wl
 }
 
@@ -69,34 +87,92 @@ func NewWordList() *WordList {
 	return GetWordList(English)
 }
 
-func FillWordList(wl *WordList, language Language) {
-	filename, ok := languageFiles[language]
-	if !ok {
-		filename = languageFiles[English]
+func loadWordList(language Language) (*WordList, error) {
+	wordListCacheMu.Lock()
+	defer wordListCacheMu.Unlock()
+	if wl, ok := wordListCache[language]; ok {
+		return wl, nil
 	}
 
-	file, err := wordFiles.Open(filename)
+	var words map[string]bool
+	switch language {
+	case Swedish:
+		dic, err := fetchCached("sv_SE.dic", svDicURL)
+		if err != nil {
+			return nil, err
+		}
+		aff, err := fetchCached("sv_SE.aff", svAffURL)
+		if err != nil {
+			return nil, err
+		}
+		words, err = expandHunspell(dic, aff, alphabets[Swedish])
+		if err != nil {
+			return nil, err
+		}
+	default:
+		data, err := fetchCached("enable1.txt", enableURL)
+		if err != nil {
+			return nil, err
+		}
+		words = make(map[string]bool)
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		for scanner.Scan() {
+			word := strings.TrimSpace(scanner.Text())
+			if word != "" {
+				words[word] = true
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	wl := &WordList{Words: words}
+	wordListCache[language] = wl
+	return wl, nil
+}
+
+// wordlistDir is where downloaded dictionary files are cached so restarts
+// and offline development don't depend on GitHub being reachable.
+func wordlistDir() string {
+	if dir := os.Getenv("WORDLIST_DIR"); dir != "" {
+		return dir
+	}
+	if dir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(dir, "oshirigame", "wordlists")
+	}
+	return filepath.Join(os.TempDir(), "oshirigame-wordlists")
+}
+
+func fetchCached(name, url string) ([]byte, error) {
+	path := filepath.Join(wordlistDir(), name)
+	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
+		return data, nil
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return nil, fmt.Errorf("downloading %s: %w", url, err)
 	}
-	defer file.Close()
-
-	// Create a scanner to read the file line by line
-	scanner := bufio.NewScanner(file)
-
-	// Iterate through each line of the file
-	for scanner.Scan() {
-		// Get the current line
-		line := scanner.Text()
-		// Process the line (e.g., print it)
-		wl.Words[line] = true
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("downloading %s: status %s", url, resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("downloading %s: %w", url, err)
 	}
 
-	// Check for any errors during scanning
-	if err := scanner.Err(); err != nil {
-		fmt.Println("Error:", err)
+	if err := os.MkdirAll(wordlistDir(), 0o755); err == nil {
+		// Write via a temp file so a crash mid-write never leaves a
+		// truncated file that a later start would trust.
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, data, 0o644); err == nil {
+			_ = os.Rename(tmp, path)
+		}
 	}
+	return data, nil
 }
 
 func (wl *WordList) GetScore(word string) int {
